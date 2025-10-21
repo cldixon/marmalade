@@ -1,24 +1,62 @@
 <script>
+	import { onMount } from 'svelte';
 	import { themes } from '$lib/utils/themes.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
 	import { calculateChunks, getChunkColor, getChunkMetadata } from '$lib/utils/chunking.js';
 
 	// State
-	let theme = 'classic';
 	let text = '';
 	let strategy = 'tokens';
 	let selectedTokenizer = 'mpnet';
 	let maxTokens = 384;
 	let overlap = 0;
-	let showSettings = false;
 	let showAdvanced = false;
 	let hoveredChunk = null;
-	let isEditing = false;
 	let selectedChunk = null;
+	let isEditing = false;
+
+	// Handle Done/Edit button click
+	function toggleEditMode() {
+		isEditing = !isEditing;
+	}
+
+	// Handle blur - exit edit mode when clicking outside
+	function handleBlur(event) {
+		// Small delay to allow button click to process first
+		setTimeout(() => {
+			if (isEditing && text !== '') {
+				isEditing = false;
+			}
+		}, 100);
+	}
+
+	// Global click handler to close side panel when clicking outside
+	function handleGlobalClick(event) {
+		// Check if click is outside of chunks and side panel
+		const clickedChunk = event.target.closest('span[role="button"]');
+		const clickedSidePanel = event.target.closest('[data-side-panel]');
+
+		if (!clickedChunk && !clickedSidePanel && selectedChunk !== null) {
+			selectedChunk = null;
+		}
+	}
+
+	// Add/remove global click listener
+	onMount(() => {
+		if (typeof document !== 'undefined') {
+			document.addEventListener('click', handleGlobalClick);
+		}
+
+		return () => {
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('click', handleGlobalClick);
+			}
+		};
+	});
 
 	// Reactive computed values
-	$: currentTheme = themes[theme];
+	const currentTheme = themes.classic;
 	$: currentTokenizer = tokenizers.find((t) => t.id === selectedTokenizer);
 	$: chunks = calculateChunks(text, strategy, maxTokens, overlap);
 
@@ -27,13 +65,9 @@
 		maxTokens = currentTokenizer.contextWindow;
 	}
 
-	const sampleText = `Paddington Bear is a fictional character in children's literature. He first appeared on 13 October 1958 in the children's book A Bear Called Paddington by Michael Bond.
+	const sampleText = `Marmalade sandwiches are Paddington Bear's favorite food in the world. Paddington's Aunt Lucy taught him how to make marmalade sandwiches back in the jungles of Darkest Peru. His Uncle Pastuzo always kept a marmalade sandwich under his red bucket hat 'in case of emergency'.
 
-The character of Paddington Bear was inspired by a teddy bear that Michael Bond had purchased from Selfridges department store in London on Christmas Eve 1956. He named the bear after the railway station in which he was living at the time.
-
-Paddington is known for his love of marmalade sandwiches, which he always keeps in his suitcase "for emergencies." He is also famous for his polite nature and his habit of giving people a "hard stare" when he feels something is not quite right.
-
-The stories follow Paddington's adventures as he settles into his new life with the Brown family at 32 Windsor Gardens in London. His misunderstandings of British culture and his good intentions often lead to humorous situations, but everything usually works out in the end.`;
+Oranges and sugar are used to make the marmalade, then it is spread between two pieces of bread to make a marmalade sandwich. To be a Proper Marmalade Sandwich, it must be made of the best marmalade you can find all around and fresh-sliced bread. Paddington likes the chipped Seville orange marmalade, with chunks of pith in.`;
 
 	function getQualityColor(quality) {
 		if (quality === 'Excellent') return currentTheme.accent;
@@ -54,55 +88,13 @@ The stories follow Paddington's adventures as he settles into his new life with 
 	<header
 		style="background-color: {currentTheme.primary}; color: white; padding: 1.5rem 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
 	>
-		<div
-			style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;"
-		>
-			<div>
-				<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">Marmalade</h1>
-				<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-					Visualize how text chunks spread across your models
-				</p>
-			</div>
-			<button
-				on:click={() => (showSettings = !showSettings)}
-				style="background-color: rgba(255,255,255,0.2); border: none; border-radius: 8px; padding: 0.75rem; cursor: pointer; color: white;"
-			>
-				Theme
-			</button>
+		<div style="max-width: 1400px; margin: 0 auto;">
+			<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
+			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">Text chunks visualized</p>
 		</div>
 	</header>
 
 	<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
-		<!-- Theme Settings -->
-		{#if showSettings}
-			<div
-				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-					? '0 2px 8px rgba(0,0,0,0.4)'
-					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
-			>
-				<h3 style="margin: 0 0 1rem 0; color: {currentTheme.dark};">Color Theme</h3>
-				<div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-					{#each Object.entries(themes) as [key, t]}
-						<button
-							on:click={() => (theme = key)}
-							style="padding: 0.75rem 1rem; border-radius: 8px; border: 2px solid {theme === key
-								? currentTheme.primary
-								: '#e5e7eb'}; background-color: {theme === key
-								? currentTheme.light
-								: 'white'}; cursor: pointer; font-size: 0.9rem;"
-						>
-							<div style="display: flex; align-items: center; gap: 0.5rem;">
-								<div
-									style="width: 20px; height: 20px; border-radius: 4px; background-color: {t.primary}; border: 1px solid rgba(0,0,0,0.1);"
-								></div>
-								{t.name}
-							</div>
-						</button>
-					{/each}
-				</div>
-			</div>
-		{/if}
-
 		<!-- Chunking Settings -->
 		{#if showAdvanced}
 			<div
@@ -263,76 +255,76 @@ The stories follow Paddington's adventures as he settles into his new life with 
 		{/if}
 
 		<!-- Active Configuration -->
-		{#if chunks.length > 0}
+		<div
+			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
+				? '0 2px 8px rgba(0,0,0,0.4)'
+				: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
+		>
 			<div
-				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-					? '0 2px 8px rgba(0,0,0,0.4)'
-					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
+				style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
 			>
-				<div
-					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+				<h4
+					style="margin: 0; color: {currentTheme.dark}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;"
 				>
-					<h4
-						style="margin: 0; color: {currentTheme.dark}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;"
+					Active Configuration
+				</h4>
+				<button
+					on:click={() => (showAdvanced = !showAdvanced)}
+					style="padding: 0.25rem 0.75rem; background-color: {currentTheme.light}; border: 1px solid {currentTheme.border}; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: {currentTheme.dark}; font-weight: 500;"
+				>
+					Modify
+				</button>
+			</div>
+			<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+				<div>
+					<div
+						style="font-size: 0.75rem; color: {currentTheme.isDark
+							? '#9CA3AF'
+							: '#6b7280'}; margin-bottom: 0.25rem;"
 					>
-						Active Configuration
-					</h4>
-					<button
-						on:click={() => (showAdvanced = !showAdvanced)}
-						style="padding: 0.25rem 0.75rem; background-color: {currentTheme.light}; border: 1px solid {currentTheme.border}; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: {currentTheme.dark}; font-weight: 500;"
-					>
-						Modify
-					</button>
-				</div>
-				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-bottom: 0.25rem;"
-						>
-							Tokenizer
-						</div>
-						<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
-							{currentTokenizer.name}
-						</div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; font-family: monospace; margin-top: 0.125rem;"
-						>
-							{currentTokenizer.model}
-						</div>
+						Tokenizer
 					</div>
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-bottom: 0.25rem;"
-						>
-							Strategy
-						</div>
-						<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
-							{strategies.find((s) => s.id === strategy).name}
-						</div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-top: 0.125rem;"
-						>
-							{#if strategy === 'tokens' || strategy === 'hybrid'}
-								{maxTokens} tokens/chunk{#if strategy === 'tokens' && overlap > 0}, {overlap} overlap{/if}
-							{:else if strategy === 'paragraph'}
-								Split on double line breaks
-							{:else if strategy === 'sentence'}
-								Split on sentence boundaries
-							{/if}
-						</div>
+					<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
+						{currentTokenizer.name}
+					</div>
+					<div
+						style="font-size: 0.75rem; color: {currentTheme.isDark
+							? '#9CA3AF'
+							: '#6b7280'}; font-family: monospace; margin-top: 0.125rem;"
+					>
+						{currentTokenizer.model}
+					</div>
+				</div>
+				<div>
+					<div
+						style="font-size: 0.75rem; color: {currentTheme.isDark
+							? '#9CA3AF'
+							: '#6b7280'}; margin-bottom: 0.25rem;"
+					>
+						Strategy
+					</div>
+					<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
+						{strategies.find((s) => s.id === strategy).name}
+					</div>
+					<div
+						style="font-size: 0.75rem; color: {currentTheme.isDark
+							? '#9CA3AF'
+							: '#6b7280'}; margin-top: 0.125rem;"
+					>
+						{#if strategy === 'tokens' || strategy === 'hybrid'}
+							{maxTokens} tokens/chunk{#if strategy === 'tokens' && overlap > 0}, {overlap} overlap{/if}
+						{:else if strategy === 'paragraph'}
+							Split on double line breaks
+						{:else if strategy === 'sentence'}
+							Split on sentence boundaries
+						{/if}
 					</div>
 				</div>
 			</div>
+		</div>
 
-			<!-- Stats Bar -->
+		<!-- Stats Bar -->
+		{#if chunks.length > 0}
 			<div
 				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
 					? '0 2px 8px rgba(0,0,0,0.4)'
@@ -377,50 +369,52 @@ The stories follow Paddington's adventures as he settles into his new life with 
 			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; box-shadow: {currentTheme.isDark
 				? '0 2px 8px rgba(0,0,0,0.4)'
 				: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border}; min-height: 500px; display: flex; gap: 1.5rem;"
+			on:click={(e) => {
+				// Close side panel if clicking on the background (not on chunks or side panel)
+				if (e.target === e.currentTarget) {
+					selectedChunk = null;
+				}
+			}}
 		>
 			<!-- Main Content Area -->
-			<div style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};">
+			<div
+				style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};"
+				on:click={(e) => {
+					// If clicking in the main content area (not on a chunk), close panel
+					if (e.target.closest('span[role="button"]') === null && !isEditing) {
+						selectedChunk = null;
+					}
+				}}
+			>
 				<div
 					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
 				>
 					<h3 style="margin: 0; color: {currentTheme.dark};">
-						{isEditing ? 'Edit Text' : 'Text with Chunking Overlay'}
+						{text === '' ? 'Enter Text' : isEditing ? 'Edit Text' : 'Text with Chunking Overlay'}
 					</h3>
 					<div style="display: flex; gap: 0.5rem;">
-						{#if !isEditing}
+						<button
+							on:click={() => (text = sampleText)}
+							style="padding: 0.5rem 1rem; background-color: {currentTheme.accent}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
+						>
+							Load Sample
+						</button>
+						{#if text !== ''}
 							<button
-								on:click={() => (text = sampleText)}
-								style="padding: 0.5rem 1rem; background-color: {currentTheme.accent}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
+								on:click={toggleEditMode}
+								style="padding: 0.5rem 1rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
 							>
-								Load Sample
+								{isEditing ? 'Done' : 'Edit Text'}
 							</button>
 						{/if}
-						<button
-							on:click={() => (isEditing = !isEditing)}
-							style="padding: 0.5rem 1rem; background-color: {isEditing
-								? currentTheme.primary
-								: '#6b7280'}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
-						>
-							{isEditing ? 'Done Editing' : 'Edit Text'}
-						</button>
 					</div>
 				</div>
 
-				{#if text === ''}
-					<div
-						style="text-align: center; padding: 4rem 2rem; color: {currentTheme.isDark
-							? '#6B7280'
-							: '#9ca3af'}; font-size: 1rem;"
-					>
-						<div style="font-size: 2rem; margin-bottom: 1rem;">No text loaded</div>
-						<div style="font-size: 0.9rem; margin-top: 0.5rem;">
-							Click "Load Sample" or "Edit Text" to get started
-						</div>
-					</div>
-				{:else if isEditing}
+				{#if text === '' || isEditing}
 					<div>
 						<textarea
 							bind:value={text}
+							on:blur={handleBlur}
 							placeholder="Paste your text here..."
 							style="width: 100%; height: 400px; padding: 1rem; border-radius: 8px; border: 2px solid {currentTheme.border}; font-size: 1rem; font-family: inherit; resize: vertical; box-sizing: border-box; line-height: 1.7; background-color: {currentTheme.isDark
 								? currentTheme.background
@@ -431,7 +425,11 @@ The stories follow Paddington's adventures as he settles into his new life with 
 								? '#9CA3AF'
 								: '#6b7280'};"
 						>
-							Characters: {text.length} | Words: {text.split(/\s+/).filter((w) => w).length}
+							{#if text === ''}
+								Paste text above or click "Load Sample" to get started
+							{:else}
+								Characters: {text.length} | Words: {text.split(/\s+/).filter((w) => w).length}
+							{/if}
 						</div>
 					</div>
 				{:else}
@@ -445,9 +443,20 @@ The stories follow Paddington's adventures as he settles into his new life with 
 							{@const qualityColor = getQualityColor(metadata.quality)}
 
 							<span
+								role="button"
+								tabindex="0"
 								on:mouseenter={() => (hoveredChunk = idx)}
 								on:mouseleave={() => (hoveredChunk = null)}
-								on:click={() => (selectedChunk = idx === selectedChunk ? null : idx)}
+								on:click={(e) => {
+									e.stopPropagation();
+									selectedChunk = idx === selectedChunk ? null : idx;
+								}}
+								on:keydown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										selectedChunk = idx === selectedChunk ? null : idx;
+									}
+								}}
 								style="background-color: {chunkColor.bg}; background-image: {isActive
 									? `linear-gradient(90deg, ${chunkColor.border}22 0%, ${chunkColor.border}11 100%)`
 									: 'none'}; border-left: {isActive
@@ -548,6 +557,7 @@ The stories follow Paddington's adventures as he settles into his new life with 
 				{@const qualityColor = getQualityColor(metadata.quality)}
 
 				<div
+					data-side-panel
 					style="flex: 0 0 33%; background-color: {selectedChunkColor.bg}; border-radius: 8px; padding: 1.5rem; border: 2px solid {selectedChunkColor.border}; max-height: 600px; overflow-y: auto;"
 				>
 					<div
