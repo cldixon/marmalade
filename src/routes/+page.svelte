@@ -90,7 +90,9 @@ Oranges and sugar are used to make the marmalade, then it is spread between two 
 	>
 		<div style="max-width: 1400px; margin: 0 auto;">
 			<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
-			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">Text chunks visualized</p>
+			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+				Visualize your text chunks
+			</p>
 		</div>
 	</header>
 
