@@ -1,4 +1,5 @@
 <script>
+	import { onMount } from 'svelte';
 	import { themes } from '$lib/utils/themes.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
@@ -30,6 +31,30 @@
 		}, 100);
 	}
 
+	// Global click handler to close side panel when clicking outside
+	function handleGlobalClick(event) {
+		// Check if click is outside of chunks and side panel
+		const clickedChunk = event.target.closest('span[role="button"]');
+		const clickedSidePanel = event.target.closest('[data-side-panel]');
+
+		if (!clickedChunk && !clickedSidePanel && selectedChunk !== null) {
+			selectedChunk = null;
+		}
+	}
+
+	// Add/remove global click listener
+	onMount(() => {
+		if (typeof document !== 'undefined') {
+			document.addEventListener('click', handleGlobalClick);
+		}
+
+		return () => {
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('click', handleGlobalClick);
+			}
+		};
+	});
+
 	// Reactive computed values
 	const currentTheme = themes.classic;
 	$: currentTokenizer = tokenizers.find((t) => t.id === selectedTokenizer);
@@ -40,17 +65,9 @@
 		maxTokens = currentTokenizer.contextWindow;
 	}
 
-	const sampleText = `Marmalade sandwiches are Paddington Bear's favorite food in the world.
+	const sampleText = `Marmalade sandwiches are Paddington Bear's favorite food in the world. Paddington's Aunt Lucy taught him how to make marmalade sandwiches back in the jungles of Darkest Peru. His Uncle Pastuzo always kept a marmalade sandwich under his red bucket hat 'in case of emergency'.
 
-	Paddington's Aunt Lucy taught him how to make marmalade sandwiches back in the jungles of Darkest Peru.
-
-	His Uncle Pastuzo always kept a marmalade sandwich under his red bucket hat 'in case of emergency'.
-
-	Oranges and sugar are used to make the marmalade, then it is spread between two pieces of bread to make a marmalade sandwich.
-
-	To be a Proper Marmalade Sandwich, it must be made of the best marmalade you can find all around and fresh-sliced bread.
-
-	Paddington likes the chipped Seville orange marmalade, with chunks of pith in.`;
+Oranges and sugar are used to make the marmalade, then it is spread between two pieces of bread to make a marmalade sandwich. To be a Proper Marmalade Sandwich, it must be made of the best marmalade you can find all around and fresh-sliced bread. Paddington likes the chipped Seville orange marmalade, with chunks of pith in.`;
 
 	function getQualityColor(quality) {
 		if (quality === 'Excellent') return currentTheme.accent;
@@ -73,9 +90,7 @@
 	>
 		<div style="max-width: 1400px; margin: 0 auto;">
 			<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
-			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-				Visualize text chunks for embeddings
-			</p>
+			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">Text chunks visualized</p>
 		</div>
 	</header>
 
@@ -354,9 +369,23 @@
 			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; box-shadow: {currentTheme.isDark
 				? '0 2px 8px rgba(0,0,0,0.4)'
 				: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border}; min-height: 500px; display: flex; gap: 1.5rem;"
+			on:click={(e) => {
+				// Close side panel if clicking on the background (not on chunks or side panel)
+				if (e.target === e.currentTarget) {
+					selectedChunk = null;
+				}
+			}}
 		>
 			<!-- Main Content Area -->
-			<div style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};">
+			<div
+				style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};"
+				on:click={(e) => {
+					// If clicking in the main content area (not on a chunk), close panel
+					if (e.target.closest('span[role="button"]') === null && !isEditing) {
+						selectedChunk = null;
+					}
+				}}
+			>
 				<div
 					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
 				>
@@ -414,9 +443,20 @@
 							{@const qualityColor = getQualityColor(metadata.quality)}
 
 							<span
+								role="button"
+								tabindex="0"
 								on:mouseenter={() => (hoveredChunk = idx)}
 								on:mouseleave={() => (hoveredChunk = null)}
-								on:click={() => (selectedChunk = idx === selectedChunk ? null : idx)}
+								on:click={(e) => {
+									e.stopPropagation();
+									selectedChunk = idx === selectedChunk ? null : idx;
+								}}
+								on:keydown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										selectedChunk = idx === selectedChunk ? null : idx;
+									}
+								}}
 								style="background-color: {chunkColor.bg}; background-image: {isActive
 									? `linear-gradient(90deg, ${chunkColor.border}22 0%, ${chunkColor.border}11 100%)`
 									: 'none'}; border-left: {isActive
@@ -517,6 +557,7 @@
 				{@const qualityColor = getQualityColor(metadata.quality)}
 
 				<div
+					data-side-panel
 					style="flex: 0 0 33%; background-color: {selectedChunkColor.bg}; border-radius: 8px; padding: 1.5rem; border: 2px solid {selectedChunkColor.border}; max-height: 600px; overflow-y: auto;"
 				>
 					<div
