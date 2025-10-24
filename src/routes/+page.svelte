@@ -4,6 +4,8 @@
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
 	import { calculateChunks, getChunkColor, getChunkMetadata } from '$lib/utils/chunking.js';
+	import { getRandomSample } from '$lib/data/samples.js';
+	import { VERSION } from '$lib/version.js';
 
 	// State
 	let text = '';
@@ -65,10 +67,6 @@
 		maxTokens = currentTokenizer.contextWindow;
 	}
 
-	const sampleText = `Marmalade sandwiches are Paddington Bear's favorite food in the world. Paddington's Aunt Lucy taught him how to make marmalade sandwiches back in the jungles of Darkest Peru. His Uncle Pastuzo always kept a marmalade sandwich under his red bucket hat 'in case of emergency'.
-
-Oranges and sugar are used to make the marmalade, then it is spread between two pieces of bread to make a marmalade sandwich. To be a Proper Marmalade Sandwich, it must be made of the best marmalade you can find all around and fresh-sliced bread. Paddington likes the chipped Seville orange marmalade, with chunks of pith in.`;
-
 	function getQualityColor(quality) {
 		if (quality === 'Excellent') return currentTheme.accent;
 		if (quality === 'Warning') return '#F59E0B';
@@ -88,11 +86,20 @@ Oranges and sugar are used to make the marmalade, then it is spread between two 
 	<header
 		style="background-color: {currentTheme.primary}; color: white; padding: 1.5rem 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
 	>
-		<div style="max-width: 1400px; margin: 0 auto;">
-			<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
-			<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-				Visualize your text chunks
-			</p>
+		<div
+			style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: start;"
+		>
+			<div>
+				<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
+				<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
+					Visualize your text chunks
+				</p>
+			</div>
+			<div
+				style="color: white; opacity: 0.9; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;"
+			>
+				v{VERSION}
+			</div>
 		</div>
 	</header>
 
@@ -396,7 +403,7 @@ Oranges and sugar are used to make the marmalade, then it is spread between two 
 					</h3>
 					<div style="display: flex; gap: 0.5rem;">
 						<button
-							on:click={() => (text = sampleText)}
+							on:click={() => (text = getRandomSample().text)}
 							style="padding: 0.5rem 1rem; background-color: {currentTheme.accent}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
 						>
 							Load Sample

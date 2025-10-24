@@ -1,0 +1,38 @@
+export const samples = [
+	{
+		id: 1,
+		text: `The bear jumped and his hat nearly fell off with excitement. “Oooh, yes, please. I should like that very much. I’ve nowhere to go and everyone seems in such a hurry.” “Well, that’s settled then,” said Mrs Brown, before her husband could change his mind. “And you can have marmalade for breakfast every morning, and—” she tried hard to think of something else that bears might like. “Every morning?” The bear looked as if it could hardly believe its ears. “I only had it on special occasions at home. Marmalade’s very expensive in Darkest Peru.” “Then you shall have it every morning starting tomorrow,” continued! Mrs Brown. “And honey on Sunday.”
+
+A worried expression came over the bear’s face. “Will it cost very much?” he asked. “You see, I haven't very much money.” “Of course not. We wouldn’t dream of charging you anything. We shall expect you to be one of the family, shan’t we, Henry?” Mrs Brown looked at her husband for support. “Of course,” said Mr Brown. “By the way,” he added, “if you are coming home with us you’d better know our names. This is Mrs Brown and I'm Mr Brown.” The bear raised its hat politely—twice. “I haven’t really got a name,” he said. “Only a Peruvian one which no one can understand.”
+
+“Then we’d better give you an English one,” said Mrs Brown. “It’ll make things much easier.” She looked round the station for inspiration. “It ought to be something special,” she said thoughtfully. As she spoke an engine standing in one of the platforms gave a loud whistle and let off a cloud of steam. “I know what!” she exclaimed. “We found you on Paddington station so we’ll call you Paddington!”
+
+“Paddington!” The bear repeated it several times to make sure. “It seems a very long name.” “Quite distinguished,” said Mr Brown. “Yes, I like Paddington as a name. Paddington it shall be.” Mrs Brown stood up. “Good. Now, Paddington, I have to meet our little daughter, Judy, off the train. She’s coming home from school. I'm sure you must be thirsty after your long journey, so you go along to the buffet with Mr Brown and he’ll buy you a nice cup of tea.”
+
+Paddington licked his lips. “I’m very thirsty,” he said. “Sea water makes you thirsty.” He picked up his suitcase, pulled his hat down firmly over his head, and waved a paw politely in the direction of the buffet. “After you, Mr Brown.” - A Bear Called Paddington, by Michael Bond`
+	},
+	{
+		id: 2,
+		text: `Paddington eyed the tray hungrily. There was half a grapefruit in a bowl, a plate of bacon and eggs, some toast, and a whole pot of marmalade, not to mention a large cup of tea. “Is all that for me?” he exclaimed. “If you don’t want it I can soon take it away again,” said Mrs Bird. “Oh, I do,” said Paddington, hurriedly. “It’s just that I’ve never seen so much breakfast before.” “Well, you’d better hurry up with it.” Mrs Bird turned in the doorway and looked back. “Because you’re going on a shopping expedition this morning with Mrs Brown and Judy. And all I can say is, thank goodness Im not going too!” She closed the door. “Now I wonder what she meant by that?” said Paddington. But he didn’t worry about it for very long. There was far too much to do. It was the first time he had ever had breakfast in bed and he soon found it wasn’t quite so easy as it looked. First of all he had trouble with the grapefruit. Every time he pressed it with his spoon a long stream of juice shot up and hit him in the eye, which was very painful.
+
+And all the time he was worried because the bacon and eggs were getting cold. Then there was the question of the marmalade. He wanted to leave room for the marmalade. In the end he decided it would be easier if he mixed everything up on the one plate and sat on the tray to eat it. “Oh, Paddington,” said Judy when she entered the room a few minutes later and found him perched on the tray, “whatever are you doing now? Do hurry up. We’re waiting for you downstairs.” Paddington looked up, an expression of bliss on his face; that part of his face which could be seen behind eggy whiskers and toast crumbs. He tried to say something but all he could manage was a muffled grunting noise which sounded like IMJUSTCOMING all rolled into one.
+
+“Really!” Judy took out her handkerchief and wiped his face. “You’re the stickiest bear imaginable. And if you don’t hurry up all the nice things will be gone. Mummy’s going to buy you a complete new outfit at Barkridges—I heard her say so. Now, comb your fur quickly and come on down.” As she closed the door Paddington looked at the remains of his breakfast. Most of it was gone but there was a large piece of bacon left which it seemed a pity to waste. He decided to put it into his suitcase in case he got hungry later on. - A Bear Called Paddington, by Michael Bond`
+	},
+	{
+		id: 3,
+		text: `## Chapter One Please Look After this Bear\n\n
+
+When they came out of the buffet Mr Brown had already found a taxi and he waved them across. The driver looked hard at Paddington and then at the inside of his nice, clean taxi. “Bears is sixpence extra,” he said, gruffly. “Sticky bears is ninepence!” “He can’t help being sticky, driver,” said Mr Brown. “He’s just had a nasty accident.” The driver hesitated. “All right, ’op in. But mind none of it comes off on me interior. I only cleaned it out this morning.” The Browns trooped obediently into the back of the taxi. Mr and Mrs Brown and Judy sat in the back, while Paddington stood on a tip-up seat behind the driver so that he could see out of the window.
+
+The sun was shining as they drove out of the station and after the gloom and the noise everything seemed bright and cheerful. They swept past a group of people at a bus stop and Paddington waved. Several people stared and one man raised his hat in return. It was all very friendly. After weeks of sitting alone in a lifeboat there was so much to see. There were people and cars and big, red buses everywhere—-it wasn’t a bit like Darkest Peru. Paddington kept one eye out of the window in case he missed anything. With his other eye he carefully examined Mr and Mrs Brown and Judy. Mr Brown was fat and jolly, with a big moustache and glasses, while Mrs Brown, who was also rather plump, looked like a larger edition of Judy. Paddington had just decided he was going to like staying with the Browns when the glass window behind the driver shot back and a gruff voice said, “Where did you say you wanted to go?”
+
+Mr Brown leaned forward. “Number thirty-two, Windsor Gardens.” The driver cupped his ear with one hand. “Can’t ’ear you,” he shouted. Paddington tapped him on the shoulder. “Number thirty-two, Windsor Gardens,” he repeated. The taxi driver jumped at the sound of Paddington’s voice and narrowly missed hitting a bus. He looked down at his shoulder and glared. “Cream!” he said, bitterly. “All over me new coat!”
+
+Judy giggled and Mr and Mrs Brown exchanged glances. Mr Brown peered at the meter. He half expected to see a sign go up saying they had to pay another sixpence. “I beg your pardon,” said Paddington. He bent forward and tried to rub the stain off with his other paw. Several bun crumbs and a smear of jam added themselves mysteriously to the taxi driver’s coat. The driver gave Paddington a long, hard look. Paddington raised his hat and the driver slammed the window shut again. “Oh dear,” said Mrs Brown. “We really shall have to give him a bath as soon as we get indoors. It’s getting everywhere.” - A Bear Called Paddington, by Michael Bond`
+	}
+];
+
+export function getRandomSample() {
+	return samples[Math.floor(Math.random() * samples.length)];
+}

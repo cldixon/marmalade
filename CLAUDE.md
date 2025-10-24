@@ -23,3 +23,10 @@ The following are a few key technical details about Marmalade:
 * Application developed with Svelte Svelte-kit
 * Application deployed on Railway
 * Application uses `transformers.js` library for client-side tokenization
+
+
+## Collaboration and Co-Development
+
+First and foremost, development of this application is an opportuntity for me to develop my skills in web application development, especially using JavaScript, Svelte, and related technologies. My background and strength is in Machine Learning, Data Engineering and Backend Development. The idea of creating a chunk visualizer based around language model tokenizers is a perfect intersection of these two things.
+
+With that said, please respect my desire to learn and grow. I am looking to your for help in that regard, and I know you are perfect for this role. There may be times that I choose to delegate some work to you entirely, either due to time constraints or a recognition that the complexity exceeds my ability to understand at that time. Generally, however, please defer to teaching me, and showing by example.
