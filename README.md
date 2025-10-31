@@ -1,42 +1,11 @@
 # Marmalade
 
-Visualize tokenized text for embedding model development.
+A chunk visualization tool for embedding model and semantic search application development. Enter a passage of text and configure your tokenizer settings to see how the text is converted into tokens.
 
-## Svelte Setup and Maintenance
+See the [deployed app](https://marmalade.cldixon.com) for a live demo.
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+##### Example screenshot
+![Example screenshot of app](img/marmalade_screenshot.png)
 
-## Creating a project
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+I developed this application as a result of developing multiple retrieval and recommendation system applications around text embeddings. It can be difficult to internally visualize and communicate to others how a given passage of text will be _translated_ into tokens, especially when chunking and windowing is involved. For many RAG (Retrieval Augmented Generation) applications, it is important to understand how the text is chunked and windowed before it is fed into the embedding model or stored in a vector database.
