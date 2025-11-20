@@ -14,7 +14,7 @@ uv sync
 
 Basic usage:
 ```python
-from marmalade_lib import chunk_text
+from marmalade import chunk_text
 
 result = chunk_text(
     text="Your text here",

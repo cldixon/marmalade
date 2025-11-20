@@ -1,0 +1,6 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "cd ../marmalade-lib && uv sync && cd ../marmalade-api && uv sync"
+
+[deploy]
+startCommand = "PYTHONPATH=src uv run uvicorn marmalade_api.main:app --host 0.0.0.0 --port $PORT"

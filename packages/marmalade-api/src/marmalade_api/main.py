@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from marmalade_lib import chunk_text
+from marmalade import chunk_text
 from pydantic import BaseModel
 
 app = FastAPI(title="Marmalade API", version="0.1.0")
