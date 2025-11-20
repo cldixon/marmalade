@@ -1,0 +1,14 @@
+[project]
+name = "marmalade-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.121.3",
+    "marmalade-lib",
+    "uvicorn>=0.38.0",
+]
+
+[tool.uv.sources]
+marmalade-lib = { path = "../marmalade-lib" }

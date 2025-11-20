@@ -4,6 +4,7 @@
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
 	import { calculateChunks, getChunkColor, getChunkMetadata } from '$lib/utils/chunking.js';
+	import { getTokenizer } from '$lib/utils/tokenization.js';
 	import { getRandomSample } from '$lib/data/samples.js';
 	import { VERSION } from '$lib/version.js';
 
@@ -17,6 +18,13 @@
 	let hoveredChunk = null;
 	let selectedChunk = null;
 	let isEditing = false;
+	let tokenizerInstance = null;
+	let tokenizerLoading = false;
+	let showTokens = false;
+	let tokenizedText = null;
+
+	// Debug: log showTokens changes
+	$: console.log('showTokens changed:', showTokens);
 
 	// Handle Done/Edit button click
 	function toggleEditMode() {
@@ -60,11 +68,45 @@
 	// Reactive computed values
 	const currentTheme = themes.classic;
 	$: currentTokenizer = tokenizers.find((t) => t.id === selectedTokenizer);
-	$: chunks = calculateChunks(text, strategy, maxTokens, overlap);
+	$: chunks = calculateChunks(text, strategy, maxTokens, overlap, tokenizerInstance);
 
-	// Update maxTokens when tokenizer changes
+	// Tokenize full text when showTokens is enabled
+	$: if (showTokens && text && tokenizerInstance) {
+		console.log('Tokenizing text...', { textLength: text.length, showTokens });
+		import('$lib/utils/tokenization.js').then(({ tokenizeText }) => {
+			tokenizedText = tokenizeText(text, tokenizerInstance);
+			console.log('Tokenization complete:', tokenizedText);
+		});
+	} else {
+		tokenizedText = null;
+		if (showTokens) {
+			console.log('Cannot tokenize:', {
+				showTokens,
+				hasText: !!text,
+				hasTokenizer: !!tokenizerInstance
+			});
+		}
+	}
+
+	// Load tokenizer when model changes
 	$: if (currentTokenizer) {
 		maxTokens = currentTokenizer.contextWindow;
+		// Only load tokenizer in browser, not during SSR
+		if (typeof window !== 'undefined') {
+			loadTokenizer(currentTokenizer.model);
+		}
+	}
+
+	async function loadTokenizer(modelId) {
+		tokenizerLoading = true;
+		try {
+			tokenizerInstance = await getTokenizer(modelId);
+		} catch (error) {
+			console.error('Failed to load tokenizer:', error);
+			tokenizerInstance = null;
+		} finally {
+			tokenizerLoading = false;
+		}
 	}
 
 	function getQualityColor(quality) {
@@ -295,6 +337,12 @@
 					</div>
 					<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
 						{currentTokenizer.name}
+						{#if tokenizerLoading}
+							<span
+								style="display: inline-block; margin-left: 0.5rem; font-size: 0.75rem; color: {currentTheme.accent};"
+								>⏳ Loading...</span
+							>
+						{/if}
 					</div>
 					<div
 						style="font-size: 0.75rem; color: {currentTheme.isDark
@@ -410,6 +458,17 @@
 						</button>
 						{#if text !== ''}
 							<button
+								on:click={() => (showTokens = !showTokens)}
+								style="padding: 0.5rem 1rem; background-color: {showTokens
+									? currentTheme.accent
+									: currentTheme.background}; color: {showTokens
+									? 'white'
+									: currentTheme.dark}; border: 2px solid {currentTheme.accent}; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"
+								disabled={!tokenizerInstance || tokenizerLoading}
+							>
+								{showTokens ? 'Hide Tokens' : 'Show Tokens'}
+							</button>
+							<button
 								on:click={toggleEditMode}
 								style="padding: 0.5rem 1rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
 							>
@@ -441,14 +500,40 @@
 							{/if}
 						</div>
 					</div>
+				{:else if showTokens && tokenizedText && tokenizedText.tokens.length > 0}
+					<!-- Token visualization mode -->
+					<div
+						style="margin-bottom: 1rem; padding: 1rem; background-color: {currentTheme.light}; border-radius: 8px;"
+					>
+						<strong>DEBUG: Token Mode Active</strong> - {tokenizedText.tokens.length} tokens
+					</div>
+					<div
+						style="font-size: 1rem; line-height: 1.8; color: {currentTheme.dark}; overflow-wrap: break-word;"
+					>
+						{#each tokenizedText.tokens as token, idx}
+							<span
+								style="display: inline-block; margin: 2px; padding: 2px 4px; background-color: {currentTheme.light}; border-radius: 3px;"
+								title="Token {idx}: '{token}' (ID: {tokenizedText.tokenIds[idx]})"
+							>
+								{token}
+							</span>
+						{/each}
+					</div>
 				{:else}
+					<!-- Normal chunk visualization mode -->
 					<div
 						style="font-size: 1rem; line-height: 1.8; color: {currentTheme.dark}; white-space: pre-wrap; word-wrap: break-word;"
 					>
 						{#each chunks as chunk, idx}
 							{@const isActive = hoveredChunk === idx || selectedChunk === idx}
 							{@const chunkColor = getChunkColor(idx, currentTheme)}
-							{@const metadata = getChunkMetadata(chunk, strategy, maxTokens, overlap)}
+							{@const metadata = getChunkMetadata(
+								chunk,
+								strategy,
+								maxTokens,
+								overlap,
+								tokenizerInstance
+							)}
 							{@const qualityColor = getQualityColor(metadata.quality)}
 
 							<span
@@ -562,7 +647,13 @@
 			<!-- Side Detail Panel -->
 			{#if selectedChunk !== null && chunks[selectedChunk]}
 				{@const selectedChunkColor = getChunkColor(selectedChunk, currentTheme)}
-				{@const metadata = getChunkMetadata(chunks[selectedChunk], strategy, maxTokens, overlap)}
+				{@const metadata = getChunkMetadata(
+					chunks[selectedChunk],
+					strategy,
+					maxTokens,
+					overlap,
+					tokenizerInstance
+				)}
 				{@const qualityColor = getQualityColor(metadata.quality)}
 
 				<div
