@@ -23,6 +23,7 @@ Thumbs.db
 __pycache__
 dist/
 build/
+.pytest_cache
 
 # Vite
 vite.config.js.timestamp-*
