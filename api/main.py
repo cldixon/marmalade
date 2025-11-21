@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from marmalade.chunks import TextChunker
+
+from core.chunks import TextChunker
 
 app = FastAPI()
 
