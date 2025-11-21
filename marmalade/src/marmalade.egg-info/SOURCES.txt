@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/marmalade/__init__.py
+src/marmalade/chunks.py
+src/marmalade.egg-info/PKG-INFO
+src/marmalade.egg-info/SOURCES.txt
+src/marmalade.egg-info/dependency_links.txt
+src/marmalade.egg-info/requires.txt
+src/marmalade.egg-info/top_level.txt
