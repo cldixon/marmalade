@@ -1,0 +1,13 @@
+[phases.setup]
+nixPkgs = ['python312']
+
+[phases.install]
+cmds = [
+    'curl -LsSf https://astral.sh/uv/install.sh | sh',
+    'export PATH="/root/.cargo/bin:$PATH"',
+    'cd marmalade && uv sync',
+    'cd ../api && uv sync'
+]
+
+[start]
+cmd = 'cd api && uv run hypercorn main:app --bind "[::]:$PORT"'
