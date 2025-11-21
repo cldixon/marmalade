@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['python312', 'gcc-unwrapped']
+nixPkgs = ['python312', 'stdenv.cc.cc.lib']
 
 [phases.install]
 cmds = [
@@ -10,4 +10,4 @@ cmds = [
 ]
 
 [start]
-cmd = 'cd api && uv run hypercorn main:app --bind "[::]:$PORT"'
+cmd = 'export LD_LIBRARY_PATH=/nix/var/nix/profiles/default/lib:$LD_LIBRARY_PATH && cd api && uv run hypercorn main:app --bind "[::]:$PORT"'
