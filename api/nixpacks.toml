@@ -5,7 +5,7 @@ nixPkgs = ['python312']
 cmds = [
     'curl -LsSf https://astral.sh/uv/install.sh | sh',
     'export PATH="/root/.local/bin:$PATH"',
-    'cd .. && uv pip install -e ./marmalade',
+    'cd ../marmalade && uv sync',
     'cd /app && uv sync'
 ]
 
