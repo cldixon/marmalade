@@ -7,5 +7,15 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.121.3",
     "hypercorn>=0.18.0",
+    "marmalade",
     "tokenizers>=0.22.1",
 ]
+
+[dependency-groups]
+dev = [
+    "ipython>=9.7.0",
+    "pytest>=9.0.1",
+]
+
+[tool.uv.sources]
+marmalade = { path = "../marmalade" }

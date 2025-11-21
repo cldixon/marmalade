@@ -1,11 +1,16 @@
-from core import TextChunker
 from fastapi import FastAPI
+from marmalade.chunks import TextChunker
 
 app = FastAPI()
 
 
 @app.get("/")
 def root():
-    chunker = TextChunker("bert-base-uncased")
-    chunked_text = chunker.chunk_text("Hello, world!", 5)
-    return {"message": "Marmalade API", "chunks": chunked_text}
+    chunker = TextChunker("bert-base-uncased", max_tokens=128)
+    chunked_text = chunker.chunk(text="Mmm, marmalade is so delicious!")
+    return {"message": "Marmalade API", "chunks": chunked_text, "new_field": 3}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
