@@ -10,4 +10,7 @@ cmds = [
 ]
 
 [start]
-cmd = 'export LD_LIBRARY_PATH=/nix/var/nix/profiles/default/lib:$LD_LIBRARY_PATH && cd api && uv run hypercorn main:app --bind "[::]:$PORT"'
+cmd = 'cd api && uv run hypercorn main:app --bind "[::]:$PORT"'
+
+[variables]
+LD_LIBRARY_PATH = '/nix/var/nix/profiles/default/lib'
