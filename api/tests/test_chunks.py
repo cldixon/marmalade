@@ -7,7 +7,7 @@ Or simply: python test_chunks.py
 
 import pytest
 
-from marmalade.chunks import (
+from core.chunks import (
     ChunkingError,
     TextChunker,
     TokenLimitExceededError,
