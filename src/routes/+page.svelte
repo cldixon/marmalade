@@ -9,7 +9,7 @@
 		getChunkMetadata,
 		computeAllChunkMetadata
 	} from '$lib/utils/chunking.js';
-	import { loadTokenizer, isTokenizerLoaded, isTokenizerLoading } from '$lib/tokenizer/index.js';
+	import { loadTokenizer } from '$lib/tokenizer/index.js';
 	import { getRandomSample } from '$lib/data/samples.js';
 	import { VERSION } from '$lib/version.js';
 
@@ -40,7 +40,7 @@
 	}
 
 	// Handle blur - exit edit mode when clicking outside
-	function handleBlur(event) {
+	function handleBlur() {
 		// Small delay to allow button click to process first
 		setTimeout(() => {
 			if (isEditing && text !== '') {
@@ -247,7 +247,7 @@
 								? 'wait'
 								: 'pointer'}; font-weight: 500; opacity: {tokenizerLoading ? 0.7 : 1};"
 						>
-							{#each tokenizers as tok}
+							{#each tokenizers as tok (tok.id)}
 								<option value={tok.id}>{tok.name} ({tok.contextWindow} tokens)</option>
 							{/each}
 						</select>
@@ -304,7 +304,7 @@
 							aria-labelledby="strategy-label"
 							style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
 						>
-							{#each strategies as s}
+							{#each strategies as s (s.id)}
 								<button
 									on:click={() => (strategy = s.id)}
 									style="padding: 0.75rem; border-radius: 8px; border: 2px solid {strategy === s.id
@@ -614,7 +614,7 @@
 					<div
 						style="font-size: 1rem; line-height: 1.8; color: {currentTheme.dark}; white-space: pre-wrap; word-wrap: break-word;"
 					>
-						{#each chunks as chunk, idx}
+						{#each chunks as chunk, idx (idx)}
 							{@const isActive = hoveredChunk === idx || selectedChunk === idx}
 							{@const chunkColor = getChunkColor(idx, currentTheme)}
 							{@const metadata = getMetadata(idx, chunk)}
@@ -770,7 +770,7 @@
 								Statistics
 							</h5>
 							<div style="display: flex; flex-direction: column; gap: 0.5rem;">
-								{#each [['Tokens', `${metadata.tokens}/${maxTokens}`], ['Utilization', `${metadata.utilization}%`], ['Words', metadata.words], ['Characters', metadata.chars], ['Sentences', metadata.sentences], ['Tokens/Word', (metadata.tokens / metadata.words).toFixed(2)]] as [label, value]}
+								{#each [['Tokens', `${metadata.tokens}/${maxTokens}`], ['Utilization', `${metadata.utilization}%`], ['Words', metadata.words], ['Characters', metadata.chars], ['Sentences', metadata.sentences], ['Tokens/Word', (metadata.tokens / metadata.words).toFixed(2)]] as [label, value] (label)}
 									<div
 										style="display: flex; justify-content: space-between; padding: 0.5rem; background-color: {currentTheme.cardBg}; border-radius: 4px;"
 									>
