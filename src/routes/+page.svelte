@@ -3,7 +3,13 @@
 	import { themes } from '$lib/utils/themes.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
-	import { calculateChunks, getChunkColor, getChunkMetadata } from '$lib/utils/chunking.js';
+	import {
+		calculateChunks,
+		getChunkColor,
+		getChunkMetadata,
+		computeAllChunkMetadata
+	} from '$lib/utils/chunking.js';
+	import { loadTokenizer, isTokenizerLoaded, isTokenizerLoading } from '$lib/tokenizer/index.js';
 	import { getRandomSample } from '$lib/data/samples.js';
 	import { VERSION } from '$lib/version.js';
 
@@ -17,6 +23,16 @@
 	let hoveredChunk = null;
 	let selectedChunk = null;
 	let isEditing = false;
+
+	// Tokenizer loading state
+	let tokenizerLoading = false;
+	let tokenizerReady = false;
+	let tokenizerError = null;
+
+	// Real token metadata (computed async)
+	/** @type {Map<number, import('$lib/utils/chunking.js').ChunkMetadata>} */
+	let chunkMetadataMap = new Map();
+	let metadataComputing = false;
 
 	// Handle Done/Edit button click
 	function toggleEditMode() {
@@ -44,11 +60,65 @@
 		}
 	}
 
+	// Load tokenizer on mount and when selection changes
+	async function initTokenizer(tokenizerId) {
+		tokenizerLoading = true;
+		tokenizerReady = false;
+		tokenizerError = null;
+
+		try {
+			await loadTokenizer(tokenizerId);
+			tokenizerReady = true;
+		} catch (err) {
+			console.error('Failed to load tokenizer:', err);
+			tokenizerError = err.message;
+		} finally {
+			tokenizerLoading = false;
+		}
+	}
+
+	// Compute real token metadata for all chunks
+	async function updateChunkMetadata(chunks, strategy, maxTokens, overlap, tokenizerId) {
+		if (!tokenizerReady || chunks.length === 0) {
+			chunkMetadataMap = new Map();
+			return;
+		}
+
+		metadataComputing = true;
+		try {
+			chunkMetadataMap = await computeAllChunkMetadata(
+				chunks,
+				strategy,
+				maxTokens,
+				overlap,
+				tokenizerId
+			);
+		} catch (err) {
+			console.error('Failed to compute chunk metadata:', err);
+			// Fall back to estimated metadata
+			chunkMetadataMap = new Map();
+		} finally {
+			metadataComputing = false;
+		}
+	}
+
+	// Get metadata for a chunk (real if available, estimated fallback)
+	function getMetadata(idx, chunk) {
+		if (chunkMetadataMap.has(idx)) {
+			return chunkMetadataMap.get(idx);
+		}
+		// Fallback to estimated
+		return getChunkMetadata(chunk, strategy, maxTokens, overlap);
+	}
+
 	// Add/remove global click listener
 	onMount(() => {
 		if (typeof document !== 'undefined') {
 			document.addEventListener('click', handleGlobalClick);
 		}
+
+		// Load initial tokenizer
+		initTokenizer(selectedTokenizer);
 
 		return () => {
 			if (typeof document !== 'undefined') {
@@ -65,6 +135,16 @@
 	// Update maxTokens when tokenizer changes
 	$: if (currentTokenizer) {
 		maxTokens = currentTokenizer.contextWindow;
+	}
+
+	// Reload tokenizer when selection changes
+	$: if (selectedTokenizer && typeof window !== 'undefined') {
+		initTokenizer(selectedTokenizer);
+	}
+
+	// Recompute metadata when chunks or tokenizer changes
+	$: if (tokenizerReady && chunks.length > 0) {
+		updateChunkMetadata(chunks, strategy, maxTokens, overlap, selectedTokenizer);
 	}
 
 	function getQualityColor(quality) {
@@ -104,6 +184,30 @@
 	</header>
 
 	<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+		<!-- Tokenizer Loading Banner -->
+		{#if tokenizerLoading}
+			<div
+				style="background-color: {currentTheme.light}; border: 2px solid {currentTheme.primary}; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;"
+			>
+				<div
+					style="width: 1.25rem; height: 1.25rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"
+				></div>
+				<span style="color: {currentTheme.dark}; font-weight: 500;">
+					Loading tokenizer: {currentTokenizer?.model}...
+				</span>
+			</div>
+		{/if}
+
+		{#if tokenizerError}
+			<div
+				style="background-color: #FEE2E2; border: 2px solid #EF4444; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem;"
+			>
+				<span style="color: #991B1B; font-weight: 500;">
+					Failed to load tokenizer: {tokenizerError}
+				</span>
+			</div>
+		{/if}
+
 		<!-- Chunking Settings -->
 		{#if showAdvanced}
 			<div
@@ -119,23 +223,29 @@
 					</h3>
 					<button
 						on:click={() => (showAdvanced = false)}
-						style="background: none; border: none; color: {currentTheme.dark}; cursor: pointer; font-size: 1.5rem; line-height: 1; padding: 0;"
-						>×</button
+						style="padding: 0.5rem 1rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"
 					>
+						Done
+					</button>
 				</div>
 
 				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
 					<!-- Tokenizer -->
 					<div>
 						<label
+							for="tokenizer-select"
 							style="display: block; margin-bottom: 0.5rem; color: {currentTheme.dark}; font-weight: 600; font-size: 0.95rem;"
 							>Tokenizer Model</label
 						>
 						<select
+							id="tokenizer-select"
 							bind:value={selectedTokenizer}
+							disabled={tokenizerLoading}
 							style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 2px solid {currentTheme.border}; font-size: 0.95rem; background-color: {currentTheme.isDark
 								? currentTheme.background
-								: 'white'}; color: {currentTheme.dark}; cursor: pointer; font-weight: 500;"
+								: 'white'}; color: {currentTheme.dark}; cursor: {tokenizerLoading
+								? 'wait'
+								: 'pointer'}; font-weight: 500; opacity: {tokenizerLoading ? 0.7 : 1};"
 						>
 							{#each tokenizers as tok}
 								<option value={tok.id}>{tok.name} ({tok.contextWindow} tokens)</option>
@@ -171,17 +281,29 @@
 								>
 									Context Window: {currentTokenizer.contextWindow} tokens
 								</span>
+								{#if tokenizerReady}
+									<span
+										style="font-size: 0.75rem; font-weight: 600; color: #10B981; background-color: #D1FAE5; padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;"
+									>
+										Ready
+									</span>
+								{/if}
 							</div>
 						</div>
 					</div>
 
 					<!-- Strategy -->
 					<div>
-						<label
+						<span
+							id="strategy-label"
 							style="display: block; margin-bottom: 0.5rem; color: {currentTheme.dark}; font-weight: 600; font-size: 0.95rem;"
-							>Chunking Strategy</label
+							>Chunking Strategy</span
 						>
-						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+						<div
+							role="group"
+							aria-labelledby="strategy-label"
+							style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+						>
 							{#each strategies as s}
 								<button
 									on:click={() => (strategy = s.id)}
@@ -218,7 +340,9 @@
 							<div
 								style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
 							>
-								<label style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
+								<label
+									for="max-tokens-range"
+									style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
 									>Max Tokens per Chunk</label
 								>
 								<span
@@ -227,6 +351,7 @@
 								>
 							</div>
 							<input
+								id="max-tokens-range"
 								type="range"
 								bind:value={maxTokens}
 								min="64"
@@ -240,7 +365,9 @@
 								<div
 									style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
 								>
-									<label style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
+									<label
+										for="overlap-range"
+										style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
 										>Overlap Tokens</label
 									>
 									<span
@@ -249,6 +376,7 @@
 									>
 								</div>
 								<input
+									id="overlap-range"
 									type="range"
 									bind:value={overlap}
 									min="0"
@@ -263,74 +391,100 @@
 			</div>
 		{/if}
 
-		<!-- Active Configuration -->
-		<div
-			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-				? '0 2px 8px rgba(0,0,0,0.4)'
-				: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
-		>
+		<!-- Active Configuration (only shown when settings panel is closed) -->
+		{#if !showAdvanced}
 			<div
-				style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
+					? '0 2px 8px rgba(0,0,0,0.4)'
+					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
 			>
-				<h4
-					style="margin: 0; color: {currentTheme.dark}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;"
+				<div
+					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
 				>
-					Active Configuration
-				</h4>
-				<button
-					on:click={() => (showAdvanced = !showAdvanced)}
-					style="padding: 0.25rem 0.75rem; background-color: {currentTheme.light}; border: 1px solid {currentTheme.border}; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: {currentTheme.dark}; font-weight: 500;"
-				>
-					Modify
-				</button>
-			</div>
-			<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-				<div>
-					<div
-						style="font-size: 0.75rem; color: {currentTheme.isDark
-							? '#9CA3AF'
-							: '#6b7280'}; margin-bottom: 0.25rem;"
+					<h4
+						style="margin: 0; color: {currentTheme.dark}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;"
 					>
-						Tokenizer
-					</div>
-					<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
-						{currentTokenizer.name}
-					</div>
-					<div
-						style="font-size: 0.75rem; color: {currentTheme.isDark
-							? '#9CA3AF'
-							: '#6b7280'}; font-family: monospace; margin-top: 0.125rem;"
+						Active Configuration
+					</h4>
+					<button
+						on:click={() => (showAdvanced = true)}
+						style="padding: 0.25rem 0.75rem; background-color: {currentTheme.light}; border: 1px solid {currentTheme.border}; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: {currentTheme.dark}; font-weight: 500; display: flex; align-items: center; gap: 0.375rem;"
 					>
-						{currentTokenizer.model}
+						<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<circle cx="12" cy="12" r="3"></circle>
+							<path
+								d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+							></path>
+						</svg>
+						Modify
+					</button>
+				</div>
+				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+					<div>
+						<div
+							style="font-size: 0.75rem; color: {currentTheme.isDark
+								? '#9CA3AF'
+								: '#6b7280'}; margin-bottom: 0.25rem;"
+						>
+							Tokenizer
+						</div>
+						<div
+							style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark}; display: flex; align-items: center; gap: 0.5rem;"
+						>
+							{currentTokenizer.name}
+							{#if tokenizerLoading}
+								<span
+									style="width: 0.75rem; height: 0.75rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block;"
+								></span>
+							{:else if tokenizerReady}
+								<span style="color: #10B981; font-size: 0.75rem;">●</span>
+							{/if}
+						</div>
+						<div
+							style="font-size: 0.75rem; color: {currentTheme.isDark
+								? '#9CA3AF'
+								: '#6b7280'}; font-family: monospace; margin-top: 0.125rem;"
+						>
+							{currentTokenizer.model}
+						</div>
+					</div>
+					<div>
+						<div
+							style="font-size: 0.75rem; color: {currentTheme.isDark
+								? '#9CA3AF'
+								: '#6b7280'}; margin-bottom: 0.25rem;"
+						>
+							Strategy
+						</div>
+						<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
+							{strategies.find((s) => s.id === strategy).name}
+						</div>
+						<div
+							style="font-size: 0.75rem; color: {currentTheme.isDark
+								? '#9CA3AF'
+								: '#6b7280'}; margin-top: 0.125rem;"
+						>
+							{#if strategy === 'tokens' || strategy === 'hybrid'}
+								{maxTokens} tokens/chunk{#if strategy === 'tokens' && overlap > 0}, {overlap} overlap{/if}
+							{:else if strategy === 'paragraph'}
+								Split on double line breaks
+							{:else if strategy === 'sentence'}
+								Split on sentence boundaries
+							{/if}
+						</div>
 					</div>
 				</div>
-				<div>
-					<div
-						style="font-size: 0.75rem; color: {currentTheme.isDark
-							? '#9CA3AF'
-							: '#6b7280'}; margin-bottom: 0.25rem;"
-					>
-						Strategy
-					</div>
-					<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
-						{strategies.find((s) => s.id === strategy).name}
-					</div>
-					<div
-						style="font-size: 0.75rem; color: {currentTheme.isDark
-							? '#9CA3AF'
-							: '#6b7280'}; margin-top: 0.125rem;"
-					>
-						{#if strategy === 'tokens' || strategy === 'hybrid'}
-							{maxTokens} tokens/chunk{#if strategy === 'tokens' && overlap > 0}, {overlap} overlap{/if}
-						{:else if strategy === 'paragraph'}
-							Split on double line breaks
-						{:else if strategy === 'sentence'}
-							Split on sentence boundaries
-						{/if}
-					</div>
-				</div>
 			</div>
-		</div>
+		{/if}
 
 		<!-- Stats Bar -->
 		{#if chunks.length > 0}
@@ -367,13 +521,27 @@
 						</div>
 					</div>
 				</div>
-				<div style="font-size: 0.85rem; color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};">
-					Hover over chunks to see details
+				<div
+					style="font-size: 0.85rem; color: {currentTheme.isDark
+						? '#9CA3AF'
+						: '#6b7280'}; display: flex; align-items: center; gap: 0.5rem;"
+				>
+					{#if metadataComputing}
+						<span
+							style="width: 0.75rem; height: 0.75rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block;"
+						></span>
+						Computing token counts...
+					{:else if chunkMetadataMap.size > 0}
+						Token counts ready
+					{:else}
+						Hover over chunks to see details
+					{/if}
 				</div>
 			</div>
 		{/if}
 
 		<!-- Main Text Display with Side Panel -->
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
 			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; box-shadow: {currentTheme.isDark
 				? '0 2px 8px rgba(0,0,0,0.4)'
@@ -386,6 +554,7 @@
 			}}
 		>
 			<!-- Main Content Area -->
+			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 			<div
 				style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};"
 				on:click={(e) => {
@@ -448,7 +617,7 @@
 						{#each chunks as chunk, idx}
 							{@const isActive = hoveredChunk === idx || selectedChunk === idx}
 							{@const chunkColor = getChunkColor(idx, currentTheme)}
-							{@const metadata = getChunkMetadata(chunk, strategy, maxTokens, overlap)}
+							{@const metadata = getMetadata(idx, chunk)}
 							{@const qualityColor = getQualityColor(metadata.quality)}
 
 							<span
@@ -487,7 +656,7 @@
 								<!-- Hover Tooltip -->
 								{#if hoveredChunk === idx && selectedChunk !== idx}
 									<span
-										style="position: absolute; top: -7.5rem; left: 0; font-size: 0.75rem; font-weight: 500; color: {currentTheme.dark}; background-color: {currentTheme.cardBg}; padding: 0.75rem; border-radius: 6px; border: 2px solid {chunkColor.border}; white-space: nowrap; z-index: 10; box-shadow: {currentTheme.isDark
+										style="position: absolute; top: -8rem; left: 0; font-size: 0.75rem; font-weight: 500; color: {currentTheme.dark}; background-color: {currentTheme.cardBg}; padding: 0.75rem; border-radius: 6px; border: 2px solid {chunkColor.border}; white-space: nowrap; z-index: 10; box-shadow: {currentTheme.isDark
 											? '0 4px 12px rgba(0,0,0,0.6)'
 											: '0 4px 12px rgba(0,0,0,0.15)'}; min-width: 200px;"
 									>
@@ -497,6 +666,9 @@
 												: '#6b7280'}; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
 										>
 											Chunk {idx + 1}
+											{#if metadata.isEstimated}
+												<span style="color: #F59E0B;">(estimated)</span>
+											{/if}
 										</div>
 										<div style="display: flex; flex-direction: column; gap: 0.25rem;">
 											<div style="display: flex; justify-content: space-between;">
@@ -504,7 +676,7 @@
 													>Tokens:</span
 												>
 												<span style="font-weight: 600;"
-													>{metadata.estimatedTokens}/{maxTokens} ({metadata.utilization}%)</span
+													>{metadata.tokens}/{maxTokens} ({metadata.utilization}%)</span
 												>
 											</div>
 											<div style="display: flex; justify-content: space-between;">
@@ -562,7 +734,7 @@
 			<!-- Side Detail Panel -->
 			{#if selectedChunk !== null && chunks[selectedChunk]}
 				{@const selectedChunkColor = getChunkColor(selectedChunk, currentTheme)}
-				{@const metadata = getChunkMetadata(chunks[selectedChunk], strategy, maxTokens, overlap)}
+				{@const metadata = getMetadata(selectedChunk, chunks[selectedChunk])}
 				{@const qualityColor = getQualityColor(metadata.quality)}
 
 				<div
@@ -574,6 +746,11 @@
 					>
 						<h4 style="margin: 0; color: {currentTheme.dark}; font-size: 1.1rem;">
 							Chunk {selectedChunk + 1} Details
+							{#if metadata.isEstimated}
+								<span style="font-size: 0.75rem; color: #F59E0B; font-weight: normal;">
+									(estimated)
+								</span>
+							{/if}
 						</h4>
 						<button
 							on:click={() => (selectedChunk = null)}
@@ -593,7 +770,7 @@
 								Statistics
 							</h5>
 							<div style="display: flex; flex-direction: column; gap: 0.5rem;">
-								{#each [['Tokens', `${metadata.estimatedTokens}/${maxTokens}`], ['Utilization', `${metadata.utilization}%`], ['Words', metadata.words], ['Characters', metadata.chars], ['Sentences', metadata.sentences], ['Tokens/Word', (metadata.estimatedTokens / metadata.words).toFixed(2)]] as [label, value]}
+								{#each [['Tokens', `${metadata.tokens}/${maxTokens}`], ['Utilization', `${metadata.utilization}%`], ['Words', metadata.words], ['Characters', metadata.chars], ['Sentences', metadata.sentences], ['Tokens/Word', (metadata.tokens / metadata.words).toFixed(2)]] as [label, value]}
 									<div
 										style="display: flex; justify-content: space-between; padding: 0.5rem; background-color: {currentTheme.cardBg}; border-radius: 4px;"
 									>
@@ -634,9 +811,7 @@
 											>Percentage</span
 										>
 										<span style="font-weight: 600; color: {currentTheme.dark};"
-											>{Math.round(
-												(metadata.overlapTokens / metadata.estimatedTokens) * 100
-											)}%</span
+											>{Math.round((metadata.overlapTokens / metadata.tokens) * 100)}%</span
 										>
 									</div>
 								</div>
@@ -715,3 +890,11 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>
