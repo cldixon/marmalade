@@ -8,9 +8,26 @@
  * - TokenizerService: Manages loading and caching tokenizer instances
  * - tokenize(): Returns detailed tokenization results
  * - countTokens(): Quick token count for a given text
+ *
+ * Note: The @huggingface/transformers library is loaded dynamically
+ * to avoid server-side initialization issues during SSR/deployment.
  */
 
-import { AutoTokenizer } from '@huggingface/transformers';
+/** @type {typeof import('@huggingface/transformers').AutoTokenizer | null} */
+let AutoTokenizer = null;
+
+/**
+ * Dynamically load the transformers library.
+ * This avoids loading the heavy WASM/ONNX runtime on the server.
+ */
+async function getAutoTokenizer() {
+	if (AutoTokenizer) {
+		return AutoTokenizer;
+	}
+	const module = await import('@huggingface/transformers');
+	AutoTokenizer = module.AutoTokenizer;
+	return AutoTokenizer;
+}
 
 /**
  * Supported tokenizer configurations.
@@ -118,12 +135,14 @@ class TokenizerService {
 			throw new Error(`Unknown tokenizer: ${tokenizerId}`);
 		}
 
-		// Start loading and track the promise
-		const loadPromise = AutoTokenizer.from_pretrained(config.model).then((tokenizer) => {
+		// Dynamically load the transformers library and then the tokenizer
+		const loadPromise = (async () => {
+			const Tokenizer = await getAutoTokenizer();
+			const tokenizer = await Tokenizer.from_pretrained(config.model);
 			this.cache.set(tokenizerId, tokenizer);
 			this.loading.delete(tokenizerId);
 			return tokenizer;
-		});
+		})();
 
 		this.loading.set(tokenizerId, loadPromise);
 		return loadPromise;
