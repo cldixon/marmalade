@@ -1,6 +1,9 @@
 <script>
+	import { settings } from '$lib/stores/settings.svelte.js';
+	import { apiKey } from '$lib/stores/apikey.svelte.js';
+	import { getEmbedding } from '$lib/services/openai.js';
+
 	/**
-	 * Stripped-down side panel for selected chunk details.
 	 * @type {{
 	 *   index: number,
 	 *   chunk: string,
@@ -11,8 +14,52 @@
 	 */
 	let { index, chunk, metadata, maxTokens, onclose } = $props();
 
+	let curlCopied = $state(false);
+	let embeddingLoading = $state(false);
+	let embeddingError = $state(null);
+	let embeddingResult = $state(null);
+
 	function copyToClipboard(text) {
 		navigator.clipboard.writeText(text);
+	}
+
+	function buildCurlCommand() {
+		const escaped = chunk.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+		const model = settings.embedding.model;
+		const dims = settings.embedding.dimensions;
+		const bodyObj = { input: escaped, model };
+		if (dims) bodyObj.dimensions = dims;
+
+		const bodyJson = JSON.stringify(bodyObj, null, 2);
+		return `curl https://api.openai.com/v1/embeddings \\
+  -H "Authorization: Bearer $OPENAI_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${bodyJson}'`;
+	}
+
+	function copyCurl() {
+		navigator.clipboard.writeText(buildCurlCommand());
+		curlCopied = true;
+		setTimeout(() => (curlCopied = false), 2000);
+	}
+
+	async function fetchEmbedding() {
+		embeddingLoading = true;
+		embeddingError = null;
+		embeddingResult = null;
+
+		try {
+			const result = await getEmbedding(chunk, {
+				apiKey: apiKey.value,
+				model: settings.embedding.model,
+				dimensions: settings.embedding.dimensions
+			});
+			embeddingResult = result;
+		} catch (err) {
+			embeddingError = err.message;
+		} finally {
+			embeddingLoading = false;
+		}
 	}
 </script>
 
@@ -50,15 +97,58 @@
 		{/if}
 	</div>
 
-	<div class="quality">
-		<span class="quality-badge" class:excellent={metadata.quality === 'Excellent'} class:good={metadata.quality === 'Good'} class:warning={metadata.quality === 'Warning'} class:low={metadata.quality === 'Low'}>
-			{metadata.quality}
-		</span>
+	<div class="actions">
+		<button class="btn-action btn-copy" onclick={() => copyToClipboard(chunk)}>
+			Copy Text
+		</button>
+		<button
+			class="btn-action btn-curl"
+			onclick={copyCurl}
+			title="curl command for OpenAI {settings.embedding.model}"
+		>
+			{curlCopied ? 'Copied!' : 'Copy Embedding Request'}
+		</button>
+		<button
+			class="btn-action btn-embed"
+			onclick={fetchEmbedding}
+			disabled={!apiKey.isSet || embeddingLoading}
+			title={apiKey.isSet ? `Call OpenAI ${settings.embedding.model}` : 'Set API key in Embeddings settings'}
+		>
+			{#if embeddingLoading}
+				<span class="spinner"></span> Embedding...
+			{:else}
+				Get Embedding
+			{/if}
+		</button>
 	</div>
 
-	<button class="btn-copy" onclick={() => copyToClipboard(chunk)}>
-		Copy Text
-	</button>
+	<!-- Embedding result -->
+	{#if embeddingError}
+		<div class="embed-error">{embeddingError}</div>
+	{/if}
+
+	{#if embeddingResult}
+		{@const embedding = embeddingResult.data[0].embedding}
+		{@const usage = embeddingResult.usage}
+		<div class="embed-result">
+			<div class="embed-header">
+				<span class="embed-title">Embedding</span>
+				<button
+					class="embed-copy"
+					onclick={() => copyToClipboard(JSON.stringify(embedding))}
+				>
+					Copy Vector
+				</button>
+			</div>
+			<div class="embed-meta">
+				<span>{embedding.length} dimensions</span>
+				<span>{usage.prompt_tokens} prompt tokens</span>
+			</div>
+			<div class="embed-preview">
+				[{embedding.slice(0, 6).map((v) => v.toFixed(6)).join(', ')}, ...]
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -135,52 +225,111 @@
 		color: var(--color-dark);
 	}
 
-	.quality {
-		margin-bottom: var(--space-lg);
+	.actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
 	}
 
-	.quality-badge {
-		display: inline-block;
-		padding: var(--space-xs) var(--space-md);
-		border-radius: var(--radius-md);
-		font-weight: 600;
-		font-size: var(--font-size-sm);
-	}
-
-	.quality-badge.excellent {
-		background-color: #d1fae5;
-		color: var(--color-success);
-	}
-
-	.quality-badge.good {
-		background-color: var(--color-light);
-		color: var(--color-primary);
-	}
-
-	.quality-badge.warning {
-		background-color: #fef3c7;
-		color: var(--color-warning);
-	}
-
-	.quality-badge.low {
-		background-color: #fee2e2;
-		color: var(--color-error);
-	}
-
-	.btn-copy {
+	.btn-action {
 		width: 100%;
 		padding: var(--space-sm) var(--space-md);
-		background-color: var(--color-accent);
-		color: white;
 		border: none;
 		border-radius: var(--radius-md);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
 		font-weight: 500;
 		transition: opacity var(--transition-fast);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-xs);
 	}
 
-	.btn-copy:hover {
+	.btn-action:hover:not(:disabled) {
 		opacity: 0.9;
+	}
+
+	.btn-action:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.btn-copy {
+		background-color: var(--color-accent);
+		color: white;
+	}
+
+	.btn-curl {
+		background-color: var(--color-dark);
+		color: white;
+	}
+
+	.btn-embed {
+		background-color: var(--color-primary);
+		color: white;
+	}
+
+	/* Embedding result */
+	.embed-error {
+		margin-top: var(--space-md);
+		padding: var(--space-sm);
+		background-color: #fee2e2;
+		border-radius: var(--radius-sm);
+		font-size: var(--font-size-xs);
+		color: #991b1b;
+	}
+
+	.embed-result {
+		margin-top: var(--space-md);
+		padding: var(--space-md);
+		background-color: var(--color-bg);
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border);
+	}
+
+	.embed-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--space-sm);
+	}
+
+	.embed-title {
+		font-size: var(--font-size-sm);
+		font-weight: 700;
+		color: var(--color-dark);
+	}
+
+	.embed-copy {
+		background: none;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 2px var(--space-sm);
+		font-size: var(--font-size-xs);
+		color: var(--color-muted);
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+	.embed-copy:hover {
+		border-color: var(--color-dark);
+		color: var(--color-dark);
+	}
+
+	.embed-meta {
+		display: flex;
+		gap: var(--space-md);
+		font-size: var(--font-size-xs);
+		color: var(--color-muted);
+		margin-bottom: var(--space-sm);
+	}
+
+	.embed-preview {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-dark);
+		word-break: break-all;
+		line-height: 1.5;
 	}
 </style>

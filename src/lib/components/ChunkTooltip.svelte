@@ -7,7 +7,7 @@
 </script>
 
 <span class="tooltip">
-	Chunk {index + 1} · {metadata.tokens} tokens · {metadata.quality}
+	Chunk {index + 1} · {metadata.tokens} tokens
 	{#if metadata.isEstimated}<span class="est">~</span>{/if}
 </span>
 

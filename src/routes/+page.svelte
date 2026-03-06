@@ -1,5 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
+	import { settings } from '$lib/stores/settings.svelte.js';
+	import { apiKey } from '$lib/stores/apikey.svelte.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import {
 		calculateChunks,
@@ -9,21 +11,17 @@
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
 
 	import Header from '$lib/components/Header.svelte';
-	import ConfigPanel from '$lib/components/ConfigPanel.svelte';
+	import TokenizerPanel from '$lib/components/TokenizerPanel.svelte';
+	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import StatsBar from '$lib/components/StatsBar.svelte';
 	import TextInput from '$lib/components/TextInput.svelte';
 	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
 	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
 	import PrivacyNotice from '$lib/components/PrivacyNotice.svelte';
 
-	// --- State ---
+	// --- Local state (UI-only, not shared) ---
 	let text = $state('');
-	let strategy = $state('tokens');
-	let selectedTokenizer = $state('mpnet');
-	let maxTokens = $state(384);
-	let overlap = $state(0);
-
-	// UI state
+	let settingsModalOpen = $state(false);
 	let hoveredChunk = $state(null);
 	let selectedChunk = $state(null);
 	let isEditing = $state(false);
@@ -38,9 +36,18 @@
 	let chunkMetadataMap = $state(new Map());
 	let metadataComputing = $state(false);
 
-	// --- Derived ---
-	let currentTokenizer = $derived(tokenizers.find((t) => t.id === selectedTokenizer));
-	let chunks = $derived(calculateChunks(text, strategy, maxTokens, overlap));
+	// --- Derived (from settings store) ---
+	let currentTokenizer = $derived(
+		tokenizers.find((t) => t.id === settings.tokenizer.modelId)
+	);
+	let chunks = $derived(
+		calculateChunks(
+			text,
+			settings.tokenizer.strategy,
+			settings.tokenizer.maxTokens,
+			settings.tokenizer.overlap
+		)
+	);
 
 	// --- Tokenizer management ---
 	async function initTokenizer(tokenizerId) {
@@ -69,10 +76,10 @@
 		try {
 			chunkMetadataMap = await computeAllChunkMetadata(
 				chunks,
-				strategy,
-				maxTokens,
-				overlap,
-				selectedTokenizer
+				settings.tokenizer.strategy,
+				settings.tokenizer.maxTokens,
+				settings.tokenizer.overlap,
+				settings.tokenizer.modelId
 			);
 		} catch (err) {
 			console.error('Failed to compute chunk metadata:', err);
@@ -86,22 +93,15 @@
 		if (chunkMetadataMap.has(idx)) {
 			return chunkMetadataMap.get(idx);
 		}
-		return getChunkMetadata(chunk, strategy, maxTokens, overlap);
+		return getChunkMetadata(
+			chunk,
+			settings.tokenizer.strategy,
+			settings.tokenizer.maxTokens,
+			settings.tokenizer.overlap
+		);
 	}
 
 	// --- Event handlers ---
-	function handleConfigChange(changes) {
-		if ('selectedTokenizer' in changes) {
-			selectedTokenizer = changes.selectedTokenizer;
-			const tok = tokenizers.find((t) => t.id === changes.selectedTokenizer);
-			if (tok) maxTokens = tok.contextWindow;
-			initTokenizer(changes.selectedTokenizer);
-		}
-		if ('strategy' in changes) strategy = changes.strategy;
-		if ('maxTokens' in changes) maxTokens = changes.maxTokens;
-		if ('overlap' in changes) overlap = changes.overlap;
-	}
-
 	function handleGlobalClick(event) {
 		const clickedChunk = event.target.closest('span[role="button"]');
 		const clickedSidePanel = event.target.closest('[data-side-panel]');
@@ -114,8 +114,15 @@
 	// --- Lifecycle ---
 	onMount(() => {
 		document.addEventListener('click', handleGlobalClick);
-		initTokenizer(selectedTokenizer);
+		apiKey.load();
+		initTokenizer(settings.tokenizer.modelId);
 		return () => document.removeEventListener('click', handleGlobalClick);
+	});
+
+	// Re-init tokenizer when model changes
+	$effect(() => {
+		const modelId = settings.tokenizer.modelId;
+		initTokenizer(modelId);
 	});
 
 	// Recompute metadata when chunks or tokenizer readiness changes
@@ -127,7 +134,7 @@
 </script>
 
 <div class="app">
-	<Header />
+	<Header onopenSettings={() => (settingsModalOpen = true)} />
 
 	{#if tokenizerLoading}
 		<div class="loading-banner">
@@ -143,15 +150,7 @@
 	{/if}
 
 	<div class="body">
-		<ConfigPanel
-			{selectedTokenizer}
-			{strategy}
-			{maxTokens}
-			{overlap}
-			{tokenizerLoading}
-			{tokenizerReady}
-			onchange={handleConfigChange}
-		/>
+		<TokenizerPanel {tokenizerLoading} {tokenizerReady} />
 
 		<main class="main">
 			<StatsBar
@@ -187,10 +186,15 @@
 			index={selectedChunk}
 			chunk={chunks[selectedChunk]}
 			metadata={getMetadata(selectedChunk, chunks[selectedChunk])}
-			{maxTokens}
+			maxTokens={settings.tokenizer.maxTokens}
 			onclose={() => (selectedChunk = null)}
 		/>
 	{/if}
+
+	<SettingsModal
+		open={settingsModalOpen}
+		onclose={() => (settingsModalOpen = false)}
+	/>
 
 	<PrivacyNotice />
 </div>

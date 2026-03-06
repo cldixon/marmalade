@@ -1,126 +1,120 @@
 <script>
+	import { settings } from '$lib/stores/settings.svelte.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import { strategies } from '$lib/utils/strategies.js';
 
 	/**
-	 * @type {{
-	 *   selectedTokenizer: string,
-	 *   strategy: string,
-	 *   maxTokens: number,
-	 *   overlap: number,
-	 *   tokenizerLoading: boolean,
-	 *   tokenizerReady: boolean,
-	 *   onchange: (changes: Record<string, any>) => void
-	 * }}
+	 * @type {{ tokenizerLoading: boolean, tokenizerReady: boolean }}
 	 */
-	let {
-		selectedTokenizer,
-		strategy,
-		maxTokens,
-		overlap,
-		tokenizerLoading,
-		tokenizerReady,
-		onchange
-	} = $props();
+	let { tokenizerLoading, tokenizerReady } = $props();
 
-	let currentTokenizer = $derived(tokenizers.find((t) => t.id === selectedTokenizer));
-	let currentStrategy = $derived(strategies.find((s) => s.id === strategy));
+	let currentTokenizer = $derived(tokenizers.find((t) => t.id === settings.tokenizer.modelId));
 
-	// Local slider state that stays in sync with props
-	let localMaxTokens = $state(maxTokens);
-	let localOverlap = $state(overlap);
+	// Local slider state synced with store
+	let localMaxTokens = $state(settings.tokenizer.maxTokens);
+	let localOverlap = $state(settings.tokenizer.overlap);
 
-	$effect(() => { localMaxTokens = maxTokens; });
-	$effect(() => { localOverlap = overlap; });
+	$effect(() => {
+		localMaxTokens = settings.tokenizer.maxTokens;
+	});
+	$effect(() => {
+		localOverlap = settings.tokenizer.overlap;
+	});
+
+	function selectTokenizer(id) {
+		settings.tokenizer.modelId = id;
+		const tok = tokenizers.find((t) => t.id === id);
+		if (tok) settings.tokenizer.maxTokens = tok.contextWindow;
+	}
 </script>
 
 <aside class="sidebar">
 	<div class="panel-content">
-		<h2 class="panel-title">Settings</h2>
+		<h2 class="panel-title">Tokenizer</h2>
 
-			<!-- Tokenizer -->
-			<div class="field">
-				<label for="tokenizer-select" class="label">Tokenizer</label>
-				<select
-					id="tokenizer-select"
-					value={selectedTokenizer}
-					disabled={tokenizerLoading}
-					onchange={(e) => onchange({ selectedTokenizer: e.target.value })}
-					class="select"
-					class:loading={tokenizerLoading}
-				>
-					{#each tokenizers as tok (tok.id)}
-						<option value={tok.id}>{tok.name}</option>
-					{/each}
-				</select>
-				{#if currentTokenizer}
-					<div class="model-detail">
-						<span class="model-id">{currentTokenizer.model}</span>
-						<span class="model-ctx">{currentTokenizer.contextWindow} tokens</span>
-						{#if tokenizerLoading}
-							<span class="spinner"></span>
-						{:else if tokenizerReady}
-							<span class="badge badge--success">Ready</span>
-						{/if}
-					</div>
-				{/if}
-			</div>
-
-			<!-- Strategy -->
-			<div class="field">
-				<span class="label">Strategy</span>
-				<div class="strategy-list">
-					{#each strategies as s (s.id)}
-						<button
-							class="strategy-btn"
-							class:active={strategy === s.id}
-							onclick={() => onchange({ strategy: s.id })}
-						>
-							<span class="strategy-name">{s.name}</span>
-							<span class="strategy-desc">{s.description}</span>
-						</button>
-					{/each}
+		<!-- Tokenizer model -->
+		<div class="field">
+			<label for="tokenizer-select" class="label">Model</label>
+			<select
+				id="tokenizer-select"
+				value={settings.tokenizer.modelId}
+				disabled={tokenizerLoading}
+				onchange={(e) => selectTokenizer(e.target.value)}
+				class="select"
+				class:loading={tokenizerLoading}
+			>
+				{#each tokenizers as tok (tok.id)}
+					<option value={tok.id}>{tok.name}</option>
+				{/each}
+			</select>
+			{#if currentTokenizer}
+				<div class="model-detail">
+					<span class="model-id">{currentTokenizer.model}</span>
+					<span class="model-ctx">{currentTokenizer.contextWindow} tokens</span>
+					{#if tokenizerLoading}
+						<span class="spinner"></span>
+					{:else if tokenizerReady}
+						<span class="badge badge--success">Ready</span>
+					{/if}
 				</div>
+			{/if}
+		</div>
+
+		<!-- Strategy -->
+		<div class="field">
+			<span class="label">Strategy</span>
+			<div class="strategy-list">
+				{#each strategies as s (s.id)}
+					<button
+						class="strategy-btn"
+						class:active={settings.tokenizer.strategy === s.id}
+						onclick={() => (settings.tokenizer.strategy = s.id)}
+					>
+						<span class="strategy-name">{s.name}</span>
+						<span class="strategy-desc">{s.description}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Token sliders -->
+		{#if settings.tokenizer.strategy === 'tokens' || settings.tokenizer.strategy === 'hybrid'}
+			<div class="field">
+				<div class="slider-header">
+					<label for="max-tokens-range" class="label">Max Tokens</label>
+					<span class="slider-value">{localMaxTokens}</span>
+				</div>
+				<input
+					id="max-tokens-range"
+					type="range"
+					bind:value={localMaxTokens}
+					min={64}
+					max={currentTokenizer?.contextWindow ?? 512}
+					step={64}
+					onchange={() => (settings.tokenizer.maxTokens = localMaxTokens)}
+					class="range"
+				/>
 			</div>
 
-			<!-- Token Settings -->
-			{#if strategy === 'tokens' || strategy === 'hybrid'}
+			{#if settings.tokenizer.strategy === 'tokens'}
 				<div class="field">
 					<div class="slider-header">
-						<label for="max-tokens-range" class="label">Max Tokens</label>
-						<span class="slider-value">{localMaxTokens}</span>
+						<label for="overlap-range" class="label">Overlap</label>
+						<span class="slider-value">{localOverlap}</span>
 					</div>
 					<input
-						id="max-tokens-range"
+						id="overlap-range"
 						type="range"
-						bind:value={localMaxTokens}
-						min={64}
-						max={currentTokenizer?.contextWindow ?? 512}
-						step={64}
-						onchange={() => onchange({ maxTokens: localMaxTokens })}
+						bind:value={localOverlap}
+						min={0}
+						max={Math.min(128, Math.floor(localMaxTokens / 2))}
+						step={16}
+						onchange={() => (settings.tokenizer.overlap = localOverlap)}
 						class="range"
 					/>
 				</div>
-
-				{#if strategy === 'tokens'}
-					<div class="field">
-						<div class="slider-header">
-							<label for="overlap-range" class="label">Overlap</label>
-							<span class="slider-value">{localOverlap}</span>
-						</div>
-						<input
-							id="overlap-range"
-							type="range"
-							bind:value={localOverlap}
-							min={0}
-							max={Math.min(128, Math.floor(localMaxTokens / 2))}
-							step={16}
-							onchange={() => onchange({ overlap: localOverlap })}
-							class="range"
-						/>
-					</div>
-				{/if}
 			{/if}
+		{/if}
 	</div>
 </aside>
 
@@ -138,7 +132,7 @@
 		padding: var(--space-lg);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-lg);
+		gap: var(--space-md);
 		overflow-y: auto;
 		height: 100%;
 	}
@@ -149,7 +143,6 @@
 		color: var(--color-dark);
 	}
 
-	/* --- Form fields --- */
 	.field {
 		display: flex;
 		flex-direction: column;
