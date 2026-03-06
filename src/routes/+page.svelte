@@ -24,7 +24,6 @@
 	let overlap = $state(0);
 
 	// UI state
-	let sidebarCollapsed = $state(false);
 	let hoveredChunk = $state(null);
 	let selectedChunk = $state(null);
 	let isEditing = $state(false);
@@ -143,7 +142,7 @@
 		</div>
 	{/if}
 
-	<div class="layout">
+	<div class="body">
 		<ConfigPanel
 			{selectedTokenizer}
 			{strategy}
@@ -151,9 +150,7 @@
 			{overlap}
 			{tokenizerLoading}
 			{tokenizerReady}
-			collapsed={sidebarCollapsed}
 			onchange={handleConfigChange}
-			ontoggle={() => (sidebarCollapsed = !sidebarCollapsed)}
 		/>
 
 		<main class="main">
@@ -225,16 +222,17 @@
 		font-weight: 500;
 	}
 
-	.layout {
-		display: flex;
+	.body {
 		flex: 1;
+		display: flex;
+		min-height: 0;
 	}
 
 	.main {
 		flex: 1;
 		padding: var(--space-lg) var(--space-xl);
-		max-width: var(--max-width);
 		min-width: 0;
+		overflow-y: auto;
 	}
 
 	.content-card {
@@ -246,6 +244,10 @@
 	}
 
 	@media (max-width: 768px) {
+		.body {
+			flex-direction: column;
+		}
+
 		.main {
 			padding: var(--space-md);
 		}

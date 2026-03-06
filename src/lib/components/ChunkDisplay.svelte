@@ -68,33 +68,33 @@
 		border-radius: var(--radius-sm);
 		transition: all var(--transition-base);
 		cursor: pointer;
-		display: inline;
+		display: inline-block;
 		position: relative;
-		padding: 1px var(--space-xs);
+		padding: var(--space-xs) var(--space-sm);
+		margin-bottom: var(--space-xs);
 	}
 
 	.chunk--even {
-		background-color: var(--color-light);
-		border-left: 2px solid var(--color-primary);
+		background-color: #fff3e0;
+		border-left: 3px solid var(--color-primary);
 	}
 
 	.chunk--odd {
-		background-color: var(--color-bg);
-		border-left: 2px solid var(--color-accent);
+		background-color: #e8eaf6;
+		border-left: 3px solid var(--color-accent);
 	}
 
 	.chunk--active {
-		box-shadow: var(--shadow-sm);
-		transform: scale(1.005);
+		box-shadow: var(--shadow-md);
 	}
 
 	.chunk--active.chunk--even {
-		border-left-width: 3px;
-		background-color: color-mix(in srgb, var(--color-light) 80%, var(--color-primary) 20%);
+		border-left-width: 4px;
+		background-color: #ffe0b2;
 	}
 
 	.chunk--active.chunk--odd {
-		border-left-width: 3px;
-		background-color: color-mix(in srgb, var(--color-bg) 80%, var(--color-accent) 20%);
+		border-left-width: 4px;
+		background-color: #c5cae9;
 	}
 </style>
