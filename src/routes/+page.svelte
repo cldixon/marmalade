@@ -1,66 +1,55 @@
 <script>
 	import { onMount } from 'svelte';
-	import { themes } from '$lib/utils/themes.js';
+	import { settings } from '$lib/stores/settings.svelte.js';
+	import { apiKey } from '$lib/stores/apikey.svelte.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
-	import { strategies } from '$lib/utils/strategies.js';
 	import {
 		calculateChunks,
-		getChunkColor,
 		getChunkMetadata,
 		computeAllChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
-	import { getRandomSample } from '$lib/data/samples.js';
-	import { VERSION } from '$lib/version.js';
 
-	// State
-	let text = '';
-	let strategy = 'tokens';
-	let selectedTokenizer = 'mpnet';
-	let maxTokens = 384;
-	let overlap = 0;
-	let showAdvanced = false;
-	let hoveredChunk = null;
-	let selectedChunk = null;
-	let isEditing = false;
+	import Header from '$lib/components/Header.svelte';
+	import TokenizerPanel from '$lib/components/TokenizerPanel.svelte';
+	import SettingsModal from '$lib/components/SettingsModal.svelte';
+	import StatsBar from '$lib/components/StatsBar.svelte';
+	import TextInput from '$lib/components/TextInput.svelte';
+	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
+	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
+	import PrivacyNotice from '$lib/components/PrivacyNotice.svelte';
+
+	// --- Local state (UI-only, not shared) ---
+	let text = $state('');
+	let settingsModalOpen = $state(false);
+	let hoveredChunk = $state(null);
+	let selectedChunk = $state(null);
+	let isEditing = $state(false);
 
 	// Tokenizer loading state
-	let tokenizerLoading = false;
-	let tokenizerReady = false;
-	let tokenizerError = null;
+	let tokenizerLoading = $state(false);
+	let tokenizerReady = $state(false);
+	let tokenizerError = $state(null);
 
-	// Real token metadata (computed async)
+	// Chunk metadata
 	/** @type {Map<number, import('$lib/utils/chunking.js').ChunkMetadata>} */
-	let chunkMetadataMap = new Map();
-	let metadataComputing = false;
+	let chunkMetadataMap = $state(new Map());
+	let metadataComputing = $state(false);
 
-	// Handle Done/Edit button click
-	function toggleEditMode() {
-		isEditing = !isEditing;
-	}
+	// --- Derived (from settings store) ---
+	let currentTokenizer = $derived(
+		tokenizers.find((t) => t.id === settings.tokenizer.modelId)
+	);
+	let chunks = $derived(
+		calculateChunks(
+			text,
+			settings.tokenizer.strategy,
+			settings.tokenizer.maxTokens,
+			settings.tokenizer.overlap
+		)
+	);
 
-	// Handle blur - exit edit mode when clicking outside
-	function handleBlur() {
-		// Small delay to allow button click to process first
-		setTimeout(() => {
-			if (isEditing && text !== '') {
-				isEditing = false;
-			}
-		}, 100);
-	}
-
-	// Global click handler to close side panel when clicking outside
-	function handleGlobalClick(event) {
-		// Check if click is outside of chunks and side panel
-		const clickedChunk = event.target.closest('span[role="button"]');
-		const clickedSidePanel = event.target.closest('[data-side-panel]');
-
-		if (!clickedChunk && !clickedSidePanel && selectedChunk !== null) {
-			selectedChunk = null;
-		}
-	}
-
-	// Load tokenizer on mount and when selection changes
+	// --- Tokenizer management ---
 	async function initTokenizer(tokenizerId) {
 		tokenizerLoading = true;
 		tokenizerReady = false;
@@ -77,8 +66,7 @@
 		}
 	}
 
-	// Compute real token metadata for all chunks
-	async function updateChunkMetadata(chunks, strategy, maxTokens, overlap, tokenizerId) {
+	async function updateChunkMetadata() {
 		if (!tokenizerReady || chunks.length === 0) {
 			chunkMetadataMap = new Map();
 			return;
@@ -88,813 +76,184 @@
 		try {
 			chunkMetadataMap = await computeAllChunkMetadata(
 				chunks,
-				strategy,
-				maxTokens,
-				overlap,
-				tokenizerId
+				settings.tokenizer.strategy,
+				settings.tokenizer.maxTokens,
+				settings.tokenizer.overlap,
+				settings.tokenizer.modelId
 			);
 		} catch (err) {
 			console.error('Failed to compute chunk metadata:', err);
-			// Fall back to estimated metadata
 			chunkMetadataMap = new Map();
 		} finally {
 			metadataComputing = false;
 		}
 	}
 
-	// Get metadata for a chunk (real if available, estimated fallback)
 	function getMetadata(idx, chunk) {
 		if (chunkMetadataMap.has(idx)) {
 			return chunkMetadataMap.get(idx);
 		}
-		// Fallback to estimated
-		return getChunkMetadata(chunk, strategy, maxTokens, overlap);
+		return getChunkMetadata(
+			chunk,
+			settings.tokenizer.strategy,
+			settings.tokenizer.maxTokens,
+			settings.tokenizer.overlap
+		);
 	}
 
-	// Add/remove global click listener
-	onMount(() => {
-		if (typeof document !== 'undefined') {
-			document.addEventListener('click', handleGlobalClick);
+	// --- Event handlers ---
+	function handleGlobalClick(event) {
+		const clickedChunk = event.target.closest('span[role="button"]');
+		const clickedSidePanel = event.target.closest('[data-side-panel]');
+
+		if (!clickedChunk && !clickedSidePanel && selectedChunk !== null) {
+			selectedChunk = null;
 		}
+	}
 
-		// Load initial tokenizer
-		initTokenizer(selectedTokenizer);
-
-		return () => {
-			if (typeof document !== 'undefined') {
-				document.removeEventListener('click', handleGlobalClick);
-			}
-		};
+	// --- Lifecycle ---
+	onMount(() => {
+		document.addEventListener('click', handleGlobalClick);
+		apiKey.load();
+		initTokenizer(settings.tokenizer.modelId);
+		return () => document.removeEventListener('click', handleGlobalClick);
 	});
 
-	// Reactive computed values
-	const currentTheme = themes.classic;
-	$: currentTokenizer = tokenizers.find((t) => t.id === selectedTokenizer);
-	$: chunks = calculateChunks(text, strategy, maxTokens, overlap);
+	// Re-init tokenizer when model changes
+	$effect(() => {
+		const modelId = settings.tokenizer.modelId;
+		initTokenizer(modelId);
+	});
 
-	// Update maxTokens when tokenizer changes
-	$: if (currentTokenizer) {
-		maxTokens = currentTokenizer.contextWindow;
-	}
-
-	// Reload tokenizer when selection changes
-	$: if (selectedTokenizer && typeof window !== 'undefined') {
-		initTokenizer(selectedTokenizer);
-	}
-
-	// Recompute metadata when chunks or tokenizer changes
-	$: if (tokenizerReady && chunks.length > 0) {
-		updateChunkMetadata(chunks, strategy, maxTokens, overlap, selectedTokenizer);
-	}
-
-	function getQualityColor(quality) {
-		if (quality === 'Excellent') return currentTheme.accent;
-		if (quality === 'Warning') return '#F59E0B';
-		if (quality === 'Low') return '#EF4444';
-		return currentTheme.primary;
-	}
-
-	function copyToClipboard(text) {
-		navigator.clipboard.writeText(text);
-	}
+	// Recompute metadata when chunks or tokenizer readiness changes
+	$effect(() => {
+		if (tokenizerReady && chunks.length > 0) {
+			updateChunkMetadata();
+		}
+	});
 </script>
 
-<div
-	style="background-color: {currentTheme.background}; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
->
-	<!-- Header -->
-	<header
-		style="background-color: {currentTheme.primary}; color: white; padding: 1.5rem 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
-	>
-		<div
-			style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: start;"
-		>
-			<div>
-				<h1 style="margin: 0; font-size: 2rem; font-weight: bold;">🫙 Marmalade</h1>
-				<p style="margin: 0.25rem 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-					Visualize your text chunks
-				</p>
-			</div>
-			<div
-				style="color: white; opacity: 0.9; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;"
-			>
-				v{VERSION}
-			</div>
+<div class="app">
+	<Header onopenSettings={() => (settingsModalOpen = true)} />
+
+	{#if tokenizerLoading}
+		<div class="loading-banner">
+			<span class="spinner spinner--lg"></span>
+			<span>Loading tokenizer: {currentTokenizer?.model}...</span>
 		</div>
-	</header>
+	{/if}
 
-	<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
-		<!-- Tokenizer Loading Banner -->
-		{#if tokenizerLoading}
-			<div
-				style="background-color: {currentTheme.light}; border: 2px solid {currentTheme.primary}; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;"
-			>
-				<div
-					style="width: 1.25rem; height: 1.25rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"
-				></div>
-				<span style="color: {currentTheme.dark}; font-weight: 500;">
-					Loading tokenizer: {currentTokenizer?.model}...
-				</span>
-			</div>
-		{/if}
+	{#if tokenizerError}
+		<div class="error-banner">
+			Failed to load tokenizer: {tokenizerError}
+		</div>
+	{/if}
 
-		{#if tokenizerError}
-			<div
-				style="background-color: #FEE2E2; border: 2px solid #EF4444; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1.5rem;"
-			>
-				<span style="color: #991B1B; font-weight: 500;">
-					Failed to load tokenizer: {tokenizerError}
-				</span>
-			</div>
-		{/if}
+	<div class="body">
+		<TokenizerPanel {tokenizerLoading} {tokenizerReady} />
 
-		<!-- Chunking Settings -->
-		{#if showAdvanced}
-			<div
-				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-					? '0 2px 8px rgba(0,0,0,0.4)'
-					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
-			>
-				<div
-					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
-				>
-					<h3 style="margin: 0; color: {currentTheme.dark}; font-size: 1.1rem;">
-						Chunking Settings
-					</h3>
-					<button
-						on:click={() => (showAdvanced = false)}
-						style="padding: 0.5rem 1rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"
-					>
-						Done
-					</button>
-				</div>
+		<main class="main">
+			<StatsBar
+				{chunks}
+				{metadataComputing}
+				metadataReady={chunkMetadataMap.size > 0}
+			/>
 
-				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-					<!-- Tokenizer -->
-					<div>
-						<label
-							for="tokenizer-select"
-							style="display: block; margin-bottom: 0.5rem; color: {currentTheme.dark}; font-weight: 600; font-size: 0.95rem;"
-							>Tokenizer Model</label
-						>
-						<select
-							id="tokenizer-select"
-							bind:value={selectedTokenizer}
-							disabled={tokenizerLoading}
-							style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 2px solid {currentTheme.border}; font-size: 0.95rem; background-color: {currentTheme.isDark
-								? currentTheme.background
-								: 'white'}; color: {currentTheme.dark}; cursor: {tokenizerLoading
-								? 'wait'
-								: 'pointer'}; font-weight: 500; opacity: {tokenizerLoading ? 0.7 : 1};"
-						>
-							{#each tokenizers as tok (tok.id)}
-								<option value={tok.id}>{tok.name} ({tok.contextWindow} tokens)</option>
-							{/each}
-						</select>
-						<div
-							style="margin-top: 0.75rem; padding: 1rem; background-color: {currentTheme.light}; border-radius: 8px; border: 1px solid {currentTheme.primary}30;"
-						>
-							<div
-								style="font-size: 0.8rem; color: {currentTheme.isDark
-									? '#9CA3AF'
-									: '#6b7280'}; margin-bottom: 0.25rem; font-weight: 600; text-transform: uppercase;"
-							>
-								Model Details
-							</div>
-							<div
-								style="font-size: 0.85rem; color: {currentTheme.dark}; margin-bottom: 0.5rem; font-family: monospace;"
-							>
-								{currentTokenizer.model}
-							</div>
-							<div
-								style="font-size: 0.85rem; color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-							>
-								{currentTokenizer.description}
-							</div>
-							<div
-								style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid {currentTheme.primary}20;"
-							>
-								<span
-									style="font-size: 0.75rem; font-weight: 600; color: {currentTheme.accent}; background-color: {currentTheme.isDark
-										? currentTheme.background
-										: 'white'}; padding: 0.25rem 0.5rem; border-radius: 4px;"
-								>
-									Context Window: {currentTokenizer.contextWindow} tokens
-								</span>
-								{#if tokenizerReady}
-									<span
-										style="font-size: 0.75rem; font-weight: 600; color: #10B981; background-color: #D1FAE5; padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;"
-									>
-										Ready
-									</span>
-								{/if}
-							</div>
-						</div>
-					</div>
+			<div class="content-card">
+				<TextInput
+					{text}
+					{isEditing}
+					onchange={(val) => (text = val)}
+					ontoggleedit={() => (isEditing = !isEditing)}
+				/>
 
-					<!-- Strategy -->
-					<div>
-						<span
-							id="strategy-label"
-							style="display: block; margin-bottom: 0.5rem; color: {currentTheme.dark}; font-weight: 600; font-size: 0.95rem;"
-							>Chunking Strategy</span
-						>
-						<div
-							role="group"
-							aria-labelledby="strategy-label"
-							style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
-						>
-							{#each strategies as s (s.id)}
-								<button
-									on:click={() => (strategy = s.id)}
-									style="padding: 0.75rem; border-radius: 8px; border: 2px solid {strategy === s.id
-										? currentTheme.primary
-										: currentTheme.border}; background-color: {strategy === s.id
-										? currentTheme.light
-										: currentTheme.isDark
-											? currentTheme.background
-											: 'white'}; cursor: pointer; text-align: left;"
-								>
-									<div style="font-weight: 600; color: {currentTheme.dark}; font-size: 0.9rem;">
-										{s.name}
-									</div>
-									<div
-										style="font-size: 0.75rem; color: {currentTheme.isDark
-											? '#9CA3AF'
-											: '#6b7280'}; margin-top: 0.25rem;"
-									>
-										{s.description}
-									</div>
-								</button>
-							{/each}
-						</div>
-					</div>
-				</div>
-
-				<!-- Token Settings -->
-				{#if strategy === 'tokens' || strategy === 'hybrid'}
-					<div
-						style="padding-top: 1.5rem; margin-top: 1.5rem; border-top: 1px solid {currentTheme.border};"
-					>
-						<div style="margin-bottom: 1.5rem;">
-							<div
-								style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
-							>
-								<label
-									for="max-tokens-range"
-									style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
-									>Max Tokens per Chunk</label
-								>
-								<span
-									style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.primary}; background-color: {currentTheme.light}; padding: 0.25rem 0.75rem; border-radius: 4px;"
-									>{maxTokens}</span
-								>
-							</div>
-							<input
-								id="max-tokens-range"
-								type="range"
-								bind:value={maxTokens}
-								min="64"
-								max={currentTokenizer.contextWindow}
-								step="64"
-								style="width: 100%; accent-color: {currentTheme.primary};"
-							/>
-						</div>
-						{#if strategy === 'tokens'}
-							<div>
-								<div
-									style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
-								>
-									<label
-										for="overlap-range"
-										style="color: {currentTheme.dark}; font-weight: 500; font-size: 0.9rem;"
-										>Overlap Tokens</label
-									>
-									<span
-										style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.accent}; background-color: {currentTheme.light}; padding: 0.25rem 0.75rem; border-radius: 4px;"
-										>{overlap}</span
-									>
-								</div>
-								<input
-									id="overlap-range"
-									type="range"
-									bind:value={overlap}
-									min="0"
-									max={Math.min(128, Math.floor(maxTokens / 2))}
-									step="16"
-									style="width: 100%; accent-color: {currentTheme.primary};"
-								/>
-							</div>
-						{/if}
-					</div>
+				{#if text !== '' && !isEditing}
+					<ChunkDisplay
+						{chunks}
+						{getMetadata}
+						{hoveredChunk}
+						{selectedChunk}
+						onhover={(idx) => (hoveredChunk = idx)}
+						onselect={(idx) => (selectedChunk = idx)}
+					/>
 				{/if}
 			</div>
-		{/if}
-
-		<!-- Active Configuration (only shown when settings panel is closed) -->
-		{#if !showAdvanced}
-			<div
-				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-					? '0 2px 8px rgba(0,0,0,0.4)'
-					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border};"
-			>
-				<div
-					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
-				>
-					<h4
-						style="margin: 0; color: {currentTheme.dark}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;"
-					>
-						Active Configuration
-					</h4>
-					<button
-						on:click={() => (showAdvanced = true)}
-						style="padding: 0.25rem 0.75rem; background-color: {currentTheme.light}; border: 1px solid {currentTheme.border}; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: {currentTheme.dark}; font-weight: 500; display: flex; align-items: center; gap: 0.375rem;"
-					>
-						<svg
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="12" cy="12" r="3"></circle>
-							<path
-								d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-							></path>
-						</svg>
-						Modify
-					</button>
-				</div>
-				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-bottom: 0.25rem;"
-						>
-							Tokenizer
-						</div>
-						<div
-							style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark}; display: flex; align-items: center; gap: 0.5rem;"
-						>
-							{currentTokenizer.name}
-							{#if tokenizerLoading}
-								<span
-									style="width: 0.75rem; height: 0.75rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block;"
-								></span>
-							{:else if tokenizerReady}
-								<span style="color: #10B981; font-size: 0.75rem;">●</span>
-							{/if}
-						</div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; font-family: monospace; margin-top: 0.125rem;"
-						>
-							{currentTokenizer.model}
-						</div>
-					</div>
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-bottom: 0.25rem;"
-						>
-							Strategy
-						</div>
-						<div style="font-size: 0.9rem; font-weight: 600; color: {currentTheme.dark};">
-							{strategies.find((s) => s.id === strategy).name}
-						</div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; margin-top: 0.125rem;"
-						>
-							{#if strategy === 'tokens' || strategy === 'hybrid'}
-								{maxTokens} tokens/chunk{#if strategy === 'tokens' && overlap > 0}, {overlap} overlap{/if}
-							{:else if strategy === 'paragraph'}
-								Split on double line breaks
-							{:else if strategy === 'sentence'}
-								Split on sentence boundaries
-							{/if}
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Stats Bar -->
-		{#if chunks.length > 0}
-			<div
-				style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: {currentTheme.isDark
-					? '0 2px 8px rgba(0,0,0,0.4)'
-					: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;"
-			>
-				<div style="display: flex; gap: 2rem; align-items: center;">
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; text-transform: uppercase; font-weight: 600;"
-						>
-							Total Chunks
-						</div>
-						<div style="font-size: 1.5rem; font-weight: bold; color: {currentTheme.primary};">
-							{chunks.length}
-						</div>
-					</div>
-					<div>
-						<div
-							style="font-size: 0.75rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'}; text-transform: uppercase; font-weight: 600;"
-						>
-							Avg Words/Chunk
-						</div>
-						<div style="font-size: 1.5rem; font-weight: bold; color: {currentTheme.accent};">
-							{Math.round(
-								chunks.reduce((sum, c) => sum + c.split(/\s+/).length, 0) / chunks.length
-							)}
-						</div>
-					</div>
-				</div>
-				<div
-					style="font-size: 0.85rem; color: {currentTheme.isDark
-						? '#9CA3AF'
-						: '#6b7280'}; display: flex; align-items: center; gap: 0.5rem;"
-				>
-					{#if metadataComputing}
-						<span
-							style="width: 0.75rem; height: 0.75rem; border: 2px solid {currentTheme.primary}; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block;"
-						></span>
-						Computing token counts...
-					{:else if chunkMetadataMap.size > 0}
-						Token counts ready
-					{:else}
-						Hover over chunks to see details
-					{/if}
-				</div>
-			</div>
-		{/if}
-
-		<!-- Main Text Display with Side Panel -->
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div
-			style="background-color: {currentTheme.cardBg}; border-radius: 12px; padding: 1.5rem; box-shadow: {currentTheme.isDark
-				? '0 2px 8px rgba(0,0,0,0.4)'
-				: '0 2px 8px rgba(0,0,0,0.1)'}; border: 2px solid {currentTheme.border}; min-height: 500px; display: flex; gap: 1.5rem;"
-			on:click={(e) => {
-				// Close side panel if clicking on the background (not on chunks or side panel)
-				if (e.target === e.currentTarget) {
-					selectedChunk = null;
-				}
-			}}
-		>
-			<!-- Main Content Area -->
-			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-			<div
-				style="flex: {selectedChunk !== null ? '0 0 65%' : '1'};"
-				on:click={(e) => {
-					// If clicking in the main content area (not on a chunk), close panel
-					if (e.target.closest('span[role="button"]') === null && !isEditing) {
-						selectedChunk = null;
-					}
-				}}
-			>
-				<div
-					style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
-				>
-					<h3 style="margin: 0; color: {currentTheme.dark};">
-						{text === '' ? 'Enter Text' : isEditing ? 'Edit Text' : 'Text with Chunking Overlay'}
-					</h3>
-					<div style="display: flex; gap: 0.5rem;">
-						<button
-							on:click={() => (text = getRandomSample().text)}
-							style="padding: 0.5rem 1rem; background-color: {currentTheme.accent}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
-						>
-							Load Sample
-						</button>
-						{#if text !== ''}
-							<button
-								on:click={toggleEditMode}
-								style="padding: 0.5rem 1rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;"
-							>
-								{isEditing ? 'Done' : 'Edit Text'}
-							</button>
-						{/if}
-					</div>
-				</div>
-
-				{#if text === '' || isEditing}
-					<div>
-						<textarea
-							bind:value={text}
-							on:blur={handleBlur}
-							placeholder="Paste your text here..."
-							style="width: 100%; height: 400px; padding: 1rem; border-radius: 8px; border: 2px solid {currentTheme.border}; font-size: 1rem; font-family: inherit; resize: vertical; box-sizing: border-box; line-height: 1.7; background-color: {currentTheme.isDark
-								? currentTheme.background
-								: 'white'}; color: {currentTheme.dark};"
-						></textarea>
-						<div
-							style="margin-top: 0.75rem; font-size: 0.85rem; color: {currentTheme.isDark
-								? '#9CA3AF'
-								: '#6b7280'};"
-						>
-							{#if text === ''}
-								Paste text above or click "Load Sample" to get started
-							{:else}
-								Characters: {text.length} | Words: {text.split(/\s+/).filter((w) => w).length}
-							{/if}
-						</div>
-					</div>
-				{:else}
-					<div
-						style="font-size: 1rem; line-height: 1.8; color: {currentTheme.dark}; white-space: pre-wrap; word-wrap: break-word;"
-					>
-						{#each chunks as chunk, idx (idx)}
-							{@const isActive = hoveredChunk === idx || selectedChunk === idx}
-							{@const chunkColor = getChunkColor(idx, currentTheme)}
-							{@const metadata = getMetadata(idx, chunk)}
-							{@const qualityColor = getQualityColor(metadata.quality)}
-
-							<span
-								role="button"
-								tabindex="0"
-								on:mouseenter={() => (hoveredChunk = idx)}
-								on:mouseleave={() => (hoveredChunk = null)}
-								on:click={(e) => {
-									e.stopPropagation();
-									selectedChunk = idx === selectedChunk ? null : idx;
-								}}
-								on:keydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										selectedChunk = idx === selectedChunk ? null : idx;
-									}
-								}}
-								style="background-color: {chunkColor.bg}; background-image: {isActive
-									? `linear-gradient(90deg, ${chunkColor.border}22 0%, ${chunkColor.border}11 100%)`
-									: 'none'}; border-left: {isActive
-									? `4px solid ${chunkColor.border}`
-									: `2px solid ${chunkColor.border}`}; border-right: {isActive
-									? `4px solid ${chunkColor.border}`
-									: `2px solid ${chunkColor.border}`}; padding-left: {isActive
-									? '0.5rem'
-									: '0.25rem'}; padding-right: {isActive
-									? '0.5rem'
-									: '0.25rem'}; margin-left: {isActive ? '-0.25rem' : '0'}; margin-right: {isActive
-									? '-0.25rem'
-									: '0'}; border-radius: 4px; transition: all 0.2s ease; cursor: pointer; display: inline-block; position: relative; box-shadow: {isActive
-									? currentTheme.isDark
-										? '0 2px 8px rgba(0,0,0,0.6)'
-										: '0 2px 8px rgba(0,0,0,0.1)'
-									: 'none'}; transform: {isActive ? 'scale(1.01)' : 'scale(1)'};"
-							>
-								<!-- Hover Tooltip -->
-								{#if hoveredChunk === idx && selectedChunk !== idx}
-									<span
-										style="position: absolute; top: -8rem; left: 0; font-size: 0.75rem; font-weight: 500; color: {currentTheme.dark}; background-color: {currentTheme.cardBg}; padding: 0.75rem; border-radius: 6px; border: 2px solid {chunkColor.border}; white-space: nowrap; z-index: 10; box-shadow: {currentTheme.isDark
-											? '0 4px 12px rgba(0,0,0,0.6)'
-											: '0 4px 12px rgba(0,0,0,0.15)'}; min-width: 200px;"
-									>
-										<div
-											style="font-size: 0.7rem; color: {currentTheme.isDark
-												? '#9CA3AF'
-												: '#6b7280'}; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
-										>
-											Chunk {idx + 1}
-											{#if metadata.isEstimated}
-												<span style="color: #F59E0B;">(estimated)</span>
-											{/if}
-										</div>
-										<div style="display: flex; flex-direction: column; gap: 0.25rem;">
-											<div style="display: flex; justify-content: space-between;">
-												<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-													>Tokens:</span
-												>
-												<span style="font-weight: 600;"
-													>{metadata.tokens}/{maxTokens} ({metadata.utilization}%)</span
-												>
-											</div>
-											<div style="display: flex; justify-content: space-between;">
-												<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-													>Words:</span
-												>
-												<span style="font-weight: 600;">{metadata.words}</span>
-											</div>
-											<div style="display: flex; justify-content: space-between;">
-												<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-													>Sentences:</span
-												>
-												<span style="font-weight: 600;">{metadata.sentences}</span>
-											</div>
-											{#if metadata.overlapTokens > 0}
-												<div style="display: flex; justify-content: space-between;">
-													<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-														>Overlap:</span
-													>
-													<span style="font-weight: 600;">{metadata.overlapTokens} tokens</span>
-												</div>
-											{/if}
-											<div
-												style="display: flex; justify-content: space-between; margin-top: 0.25rem; padding-top: 0.5rem; border-top: 1px solid {currentTheme.border};"
-											>
-												<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-													>Quality:</span
-												>
-												<span style="font-weight: 600; color: {qualityColor};"
-													>{metadata.quality}</span
-												>
-											</div>
-										</div>
-										<div
-											style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid {currentTheme.border}; font-size: 0.7rem; color: {currentTheme.isDark
-												? '#9CA3AF'
-												: '#6b7280'}; text-align: center;"
-										>
-											Click for details
-										</div>
-									</span>
-								{/if}
-								{chunk}
-							</span>
-							{#if idx < chunks.length - 1}
-								<span
-									style="display: inline-block; width: 1.5rem; height: 1px; background-color: {currentTheme.primary}; margin: 0 0.5rem; vertical-align: middle; opacity: 0.3;"
-								></span>
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<!-- Side Detail Panel -->
-			{#if selectedChunk !== null && chunks[selectedChunk]}
-				{@const selectedChunkColor = getChunkColor(selectedChunk, currentTheme)}
-				{@const metadata = getMetadata(selectedChunk, chunks[selectedChunk])}
-				{@const qualityColor = getQualityColor(metadata.quality)}
-
-				<div
-					data-side-panel
-					style="flex: 0 0 33%; background-color: {selectedChunkColor.bg}; border-radius: 8px; padding: 1.5rem; border: 2px solid {selectedChunkColor.border}; max-height: 600px; overflow-y: auto;"
-				>
-					<div
-						style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
-					>
-						<h4 style="margin: 0; color: {currentTheme.dark}; font-size: 1.1rem;">
-							Chunk {selectedChunk + 1} Details
-							{#if metadata.isEstimated}
-								<span style="font-size: 0.75rem; color: #F59E0B; font-weight: normal;">
-									(estimated)
-								</span>
-							{/if}
-						</h4>
-						<button
-							on:click={() => (selectedChunk = null)}
-							style="background: none; border: none; color: {currentTheme.dark}; cursor: pointer; font-size: 1.5rem; line-height: 1; padding: 0;"
-							>×</button
-						>
-					</div>
-
-					<div style="display: flex; flex-direction: column; gap: 1.5rem;">
-						<!-- Statistics -->
-						<div>
-							<h5
-								style="margin: 0 0 0.75rem 0; color: {currentTheme.isDark
-									? '#9CA3AF'
-									: '#6b7280'}; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
-							>
-								Statistics
-							</h5>
-							<div style="display: flex; flex-direction: column; gap: 0.5rem;">
-								{#each [['Tokens', `${metadata.tokens}/${maxTokens}`], ['Utilization', `${metadata.utilization}%`], ['Words', metadata.words], ['Characters', metadata.chars], ['Sentences', metadata.sentences], ['Tokens/Word', (metadata.tokens / metadata.words).toFixed(2)]] as [label, value] (label)}
-									<div
-										style="display: flex; justify-content: space-between; padding: 0.5rem; background-color: {currentTheme.cardBg}; border-radius: 4px;"
-									>
-										<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-											>{label}</span
-										>
-										<span style="font-weight: 600; color: {currentTheme.dark};">{value}</span>
-									</div>
-								{/each}
-							</div>
-						</div>
-
-						<!-- Overlap -->
-						{#if metadata.overlapTokens > 0}
-							<div>
-								<h5
-									style="margin: 0 0 0.75rem 0; color: {currentTheme.isDark
-										? '#9CA3AF'
-										: '#6b7280'}; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
-								>
-									Overlap
-								</h5>
-								<div
-									style="padding: 0.75rem; background-color: {currentTheme.cardBg}; border-radius: 4px;"
-								>
-									<div
-										style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;"
-									>
-										<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-											>With previous</span
-										>
-										<span style="font-weight: 600; color: {currentTheme.dark};"
-											>{metadata.overlapTokens} tokens</span
-										>
-									</div>
-									<div style="display: flex; justify-content: space-between;">
-										<span style="color: {currentTheme.isDark ? '#9CA3AF' : '#6b7280'};"
-											>Percentage</span
-										>
-										<span style="font-weight: 600; color: {currentTheme.dark};"
-											>{Math.round((metadata.overlapTokens / metadata.tokens) * 100)}%</span
-										>
-									</div>
-								</div>
-							</div>
-						{/if}
-
-						<!-- Quality Assessment -->
-						<div>
-							<h5
-								style="margin: 0 0 0.75rem 0; color: {currentTheme.isDark
-									? '#9CA3AF'
-									: '#6b7280'}; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
-							>
-								Quality Assessment
-							</h5>
-							<div
-								style="padding: 0.75rem; background-color: {currentTheme.cardBg}; border-radius: 4px;"
-							>
-								<div
-									style="display: inline-block; padding: 0.5rem 1rem; background-color: {qualityColor}20; color: {qualityColor}; border-radius: 6px; font-weight: 600; font-size: 1rem;"
-								>
-									{metadata.quality}
-								</div>
-								<div
-									style="margin-top: 0.75rem; font-size: 0.85rem; color: {currentTheme.isDark
-										? '#9CA3AF'
-										: '#6b7280'}; line-height: 1.5;"
-								>
-									{#if metadata.quality === 'Excellent'}
-										Optimal token utilization with clean sentence boundaries.
-									{:else if metadata.quality === 'Good'}
-										Acceptable chunking with reasonable token usage.
-									{:else if metadata.quality === 'Warning'}
-										Chunk splits mid-sentence. Consider adjusting strategy.
-									{:else if metadata.quality === 'Low'}
-										Low context utilization. Consider smaller chunk size.
-									{/if}
-								</div>
-							</div>
-						</div>
-
-						<!-- Actions -->
-						<div>
-							<h5
-								style="margin: 0 0 0.75rem 0; color: {currentTheme.isDark
-									? '#9CA3AF'
-									: '#6b7280'}; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
-							>
-								Actions
-							</h5>
-							<div style="display: flex; flex-direction: column; gap: 0.5rem;">
-								<button
-									on:click={() => copyToClipboard(chunks[selectedChunk])}
-									style="padding: 0.75rem; background-color: {currentTheme.accent}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"
-								>
-									Copy Text
-								</button>
-								<button
-									on:click={() => {
-										const data = {
-											chunk_id: selectedChunk,
-											text: chunks[selectedChunk],
-											metadata: metadata
-										};
-										copyToClipboard(JSON.stringify(data, null, 2));
-									}}
-									style="padding: 0.75rem; background-color: {currentTheme.primary}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"
-								>
-									Copy as JSON
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			{/if}
-		</div>
+		</main>
 	</div>
+
+	{#if selectedChunk !== null && chunks[selectedChunk]}
+		<ChunkDetailPanel
+			index={selectedChunk}
+			chunk={chunks[selectedChunk]}
+			metadata={getMetadata(selectedChunk, chunks[selectedChunk])}
+			maxTokens={settings.tokenizer.maxTokens}
+			onclose={() => (selectedChunk = null)}
+		/>
+	{/if}
+
+	<SettingsModal
+		open={settingsModalOpen}
+		onclose={() => (settingsModalOpen = false)}
+	/>
+
+	<PrivacyNotice />
 </div>
 
 <style>
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
+	.app {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.loading-banner {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-xl);
+		background-color: var(--color-light);
+		border-bottom: 1px solid var(--color-border);
+		font-size: var(--font-size-sm);
+		color: var(--color-dark);
+	}
+
+	.error-banner {
+		padding: var(--space-sm) var(--space-xl);
+		background-color: #fee2e2;
+		border-bottom: 1px solid var(--color-error);
+		font-size: var(--font-size-sm);
+		color: #991b1b;
+		font-weight: 500;
+	}
+
+	.body {
+		flex: 1;
+		display: flex;
+		min-height: 0;
+	}
+
+	.main {
+		flex: 1;
+		padding: var(--space-lg) var(--space-xl);
+		min-width: 0;
+		overflow-y: auto;
+	}
+
+	.content-card {
+		background-color: var(--color-card);
+		border-radius: var(--radius-lg);
+		padding: var(--space-lg);
+		border: 1px solid var(--color-border);
+		min-height: 400px;
+	}
+
+	@media (max-width: 768px) {
+		.body {
+			flex-direction: column;
+		}
+
+		.main {
+			padding: var(--space-md);
 		}
 	}
 </style>
