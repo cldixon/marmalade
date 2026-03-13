@@ -219,10 +219,10 @@
 
 	.error-banner {
 		padding: var(--space-sm) var(--space-xl);
-		background-color: #fee2e2;
+		background-color: var(--color-error-bg);
 		border-bottom: 1px solid var(--color-error);
 		font-size: var(--font-size-sm);
-		color: #991b1b;
+		color: var(--color-error-text);
 		font-weight: 500;
 	}
 

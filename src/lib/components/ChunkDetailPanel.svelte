@@ -274,10 +274,10 @@
 	.embed-error {
 		margin-top: var(--space-md);
 		padding: var(--space-sm);
-		background-color: #fee2e2;
+		background-color: var(--color-error-bg);
 		border-radius: var(--radius-sm);
 		font-size: var(--font-size-xs);
-		color: #991b1b;
+		color: var(--color-error-text);
 	}
 
 	.embed-result {

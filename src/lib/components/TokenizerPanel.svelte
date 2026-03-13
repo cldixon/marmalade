@@ -78,42 +78,40 @@
 		</div>
 
 		<!-- Token sliders -->
-		{#if settings.tokenizer.strategy === 'tokens' || settings.tokenizer.strategy === 'hybrid'}
+		<div class="field">
+			<div class="slider-header">
+				<label for="max-tokens-range" class="label">Max Tokens</label>
+				<span class="slider-value">{localMaxTokens}</span>
+			</div>
+			<input
+				id="max-tokens-range"
+				type="range"
+				bind:value={localMaxTokens}
+				min={64}
+				max={currentTokenizer?.contextWindow ?? 512}
+				step={64}
+				onchange={() => (settings.tokenizer.maxTokens = localMaxTokens)}
+				class="range"
+			/>
+		</div>
+
+		{#if settings.tokenizer.strategy === 'tokens'}
 			<div class="field">
 				<div class="slider-header">
-					<label for="max-tokens-range" class="label">Max Tokens</label>
-					<span class="slider-value">{localMaxTokens}</span>
+					<label for="overlap-range" class="label">Overlap</label>
+					<span class="slider-value">{localOverlap}</span>
 				</div>
 				<input
-					id="max-tokens-range"
+					id="overlap-range"
 					type="range"
-					bind:value={localMaxTokens}
-					min={64}
-					max={currentTokenizer?.contextWindow ?? 512}
-					step={64}
-					onchange={() => (settings.tokenizer.maxTokens = localMaxTokens)}
+					bind:value={localOverlap}
+					min={0}
+					max={Math.min(128, Math.floor(localMaxTokens / 2))}
+					step={16}
+					onchange={() => (settings.tokenizer.overlap = localOverlap)}
 					class="range"
 				/>
 			</div>
-
-			{#if settings.tokenizer.strategy === 'tokens'}
-				<div class="field">
-					<div class="slider-header">
-						<label for="overlap-range" class="label">Overlap</label>
-						<span class="slider-value">{localOverlap}</span>
-					</div>
-					<input
-						id="overlap-range"
-						type="range"
-						bind:value={localOverlap}
-						min={0}
-						max={Math.min(128, Math.floor(localMaxTokens / 2))}
-						step={16}
-						onchange={() => (settings.tokenizer.overlap = localOverlap)}
-						class="range"
-					/>
-				</div>
-			{/if}
 		{/if}
 	</div>
 </aside>
@@ -199,7 +197,7 @@
 
 	.badge--success {
 		color: var(--color-success);
-		background-color: #d1fae5;
+		background-color: var(--color-success-bg);
 	}
 
 	.strategy-list {

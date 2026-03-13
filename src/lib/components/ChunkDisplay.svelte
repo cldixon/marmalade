@@ -75,12 +75,12 @@
 	}
 
 	.chunk--even {
-		background-color: #fff3e0;
+		background-color: var(--color-chunk-even);
 		border-left: 3px solid var(--color-primary);
 	}
 
 	.chunk--odd {
-		background-color: #e8eaf6;
+		background-color: var(--color-chunk-odd);
 		border-left: 3px solid var(--color-accent);
 	}
 
@@ -90,11 +90,11 @@
 
 	.chunk--active.chunk--even {
 		border-left-width: 4px;
-		background-color: #ffe0b2;
+		background-color: var(--color-chunk-even-active);
 	}
 
 	.chunk--active.chunk--odd {
 		border-left-width: 4px;
-		background-color: #c5cae9;
+		background-color: var(--color-chunk-odd-active);
 	}
 </style>

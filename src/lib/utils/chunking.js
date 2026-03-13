@@ -7,7 +7,7 @@ import { countTokens } from '$lib/tokenizer/index.js';
  * accurate token counts per chunk.
  *
  * @param {string} text - The text to chunk
- * @param {string} strategy - Chunking strategy ('paragraph', 'sentence', 'tokens', 'hybrid')
+ * @param {string} strategy - Chunking strategy ('tokens', 'hybrid')
  * @param {number} maxTokens - Maximum tokens per chunk
  * @param {number} overlap - Overlap tokens (for 'tokens' strategy)
  * @returns {string[]} Array of text chunks
@@ -17,11 +17,7 @@ export function calculateChunks(text, strategy, maxTokens, overlap) {
 
 	let newChunks = [];
 
-	if (strategy === 'paragraph') {
-		newChunks = text.split(/\n\n+/).filter((p) => p.trim());
-	} else if (strategy === 'sentence') {
-		newChunks = text.match(/[^.!?]+[.!?]+/g) || [text];
-	} else if (strategy === 'tokens') {
+	if (strategy === 'tokens') {
 		const words = text.split(/\s+/);
 		// Use 1.3 as rough estimate for initial chunking
 		// Real token counts come from getChunkMetadata
