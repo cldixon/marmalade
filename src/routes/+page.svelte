@@ -9,14 +9,15 @@
 		buildChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
+	import { getRandomSample } from '$lib/data/samples.js';
 
 	import Header from '$lib/components/Header.svelte';
+	import WelcomeBanner from '$lib/components/WelcomeBanner.svelte';
 	import ConfigBar from '$lib/components/ConfigBar.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import TextInput from '$lib/components/TextInput.svelte';
 	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
 	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
-	import PrivacyNotice from '$lib/components/PrivacyNotice.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 
 	// --- Local state (UI-only, not shared) ---
@@ -25,6 +26,7 @@
 	let hoveredChunk = $state(null);
 	let selectedChunk = $state(null);
 	let isEditing = $state(false);
+	let welcomeDismissed = $state(false);
 
 	// Tokenizer loading state
 	let tokenizerLoading = $state(false);
@@ -77,6 +79,13 @@
 		);
 	}
 
+	function dismissWelcome() {
+		if (!welcomeDismissed) {
+			welcomeDismissed = true;
+			localStorage.setItem('marmalade_welcomed', 'true');
+		}
+	}
+
 	// --- Event handlers ---
 	function handleGlobalClick(event) {
 		const clickedChunk = event.target.closest('span[role="button"]');
@@ -92,6 +101,15 @@
 		document.addEventListener('click', handleGlobalClick);
 		apiKey.load();
 		initTokenizer(settings.tokenizer.modelId);
+
+		// Auto-load sample text on first visit
+		if (!localStorage.getItem('marmalade_welcomed')) {
+			const sample = getRandomSample();
+			text = sample.text;
+		} else {
+			welcomeDismissed = true;
+		}
+
 		return () => document.removeEventListener('click', handleGlobalClick);
 	});
 
@@ -135,6 +153,10 @@
 
 <div class="app">
 	<Header onopenSettings={() => (settingsModalOpen = true)} />
+
+	{#if !welcomeDismissed}
+		<WelcomeBanner ondismiss={dismissWelcome} />
+	{/if}
 
 	{#if tokenizerLoading}
 		<div class="loading-banner">
@@ -183,7 +205,7 @@
 					<TextInput
 						{text}
 						{isEditing}
-						onchange={(val) => (text = val)}
+						onchange={(val) => { text = val; dismissWelcome(); }}
 						ontoggleedit={() => (isEditing = !isEditing)}
 						headerMode={true}
 					/>
@@ -193,7 +215,7 @@
 			<TextInput
 				{text}
 				{isEditing}
-				onchange={(val) => (text = val)}
+				onchange={(val) => { text = val; dismissWelcome(); }}
 				ontoggleedit={() => (isEditing = !isEditing)}
 			/>
 
@@ -225,7 +247,6 @@
 		onclose={() => (settingsModalOpen = false)}
 	/>
 
-	<PrivacyNotice />
 	<Footer />
 </div>
 
