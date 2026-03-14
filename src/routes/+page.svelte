@@ -4,10 +4,9 @@
 	import { apiKey } from '$lib/stores/apikey.svelte.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import {
-		calculateChunks,
+		calculateChunksReal,
 		mergeSmallTrailingChunk,
-		getChunkMetadata,
-		computeAllChunkMetadata
+		buildChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
 
@@ -31,34 +30,23 @@
 	let tokenizerReady = $state(false);
 	let tokenizerError = $state(null);
 
-	// Chunk metadata
-	/** @type {Map<number, import('$lib/utils/chunking.js').ChunkMetadata>} */
-	let chunkMetadataMap = $state(new Map());
-	let metadataComputing = $state(false);
+	// Chunk computation state
+	/** @type {{ chunks: import('$lib/utils/chunking.js').ChunkInfo[], totalTokens: number, tokenization: any } | null} */
+	let chunkResult = $state(null);
+	let chunksComputing = $state(false);
+	let chunkGeneration = 0;
 
 	// --- Derived (from settings store) ---
 	let currentTokenizer = $derived(
 		tokenizers.find((t) => t.id === settings.tokenizer.modelId)
 	);
-	let chunks = $derived.by(() => {
-		const rawChunks = calculateChunks(
-			text,
-			settings.tokenizer.strategy,
-			settings.tokenizer.maxTokens,
-			settings.tokenizer.overlap,
-			settings.tokenizer.overlapStrategy
-		);
-		return mergeSmallTrailingChunk(rawChunks, settings.tokenizer.minChunkSize);
-	});
-
+	let chunks = $derived(chunkResult?.chunks ?? []);
+	let totalTokens = $derived(chunkResult?.totalTokens ?? 0);
 	let totalWords = $derived(
-		chunks.reduce((sum, c) => sum + c.split(/\s+/).length, 0)
+		chunks.reduce((sum, c) => sum + c.text.split(/\s+/).length, 0)
 	);
 	let avgWords = $derived(
 		chunks.length > 0 ? Math.round(totalWords / chunks.length) : 0
-	);
-	let totalTokensEstimated = $derived(
-		Math.ceil(totalWords * 1.3)
 	);
 
 	// --- Tokenizer management ---
@@ -78,35 +66,10 @@
 		}
 	}
 
-	async function updateChunkMetadata() {
-		if (!tokenizerReady || chunks.length === 0) {
-			chunkMetadataMap = new Map();
-			return;
-		}
-
-		metadataComputing = true;
-		try {
-			chunkMetadataMap = await computeAllChunkMetadata(
-				chunks,
-				settings.tokenizer.strategy,
-				settings.tokenizer.maxTokens,
-				settings.tokenizer.overlap,
-				settings.tokenizer.modelId
-			);
-		} catch (err) {
-			console.error('Failed to compute chunk metadata:', err);
-			chunkMetadataMap = new Map();
-		} finally {
-			metadataComputing = false;
-		}
-	}
-
-	function getMetadata(idx, chunk) {
-		if (chunkMetadataMap.has(idx)) {
-			return chunkMetadataMap.get(idx);
-		}
-		return getChunkMetadata(
-			chunk,
+	function getMetadata(idx) {
+		if (!chunks[idx]) return null;
+		return buildChunkMetadata(
+			chunks[idx],
 			settings.tokenizer.strategy,
 			settings.tokenizer.maxTokens,
 			settings.tokenizer.overlap
@@ -137,11 +100,35 @@
 		initTokenizer(modelId);
 	});
 
-	// Recompute metadata when chunks or tokenizer readiness changes
+	// Compute chunks using real tokenization
 	$effect(() => {
-		if (tokenizerReady && chunks.length > 0) {
-			updateChunkMetadata();
+		const currentText = text;
+		const { strategy, maxTokens, overlap, overlapStrategy, minChunkSize, modelId } = settings.tokenizer;
+		const ready = tokenizerReady;
+
+		if (!ready || !currentText) {
+			chunkResult = null;
+			return;
 		}
+
+		const gen = ++chunkGeneration;
+		chunksComputing = true;
+
+		calculateChunksReal(currentText, strategy, maxTokens, overlap, overlapStrategy, modelId)
+			.then((result) => {
+				if (gen !== chunkGeneration) return;
+				result.chunks = mergeSmallTrailingChunk(result.chunks, minChunkSize);
+				result.totalTokens = result.chunks.reduce((s, c) => s + c.tokenCount, 0);
+				chunkResult = result;
+			})
+			.catch((err) => {
+				if (gen !== chunkGeneration) return;
+				console.error('Failed to compute chunks:', err);
+				chunkResult = null;
+			})
+			.finally(() => {
+				if (gen === chunkGeneration) chunksComputing = false;
+			});
 	});
 </script>
 
@@ -182,9 +169,9 @@
 							<span class="stat-divider"></span>
 							<span class="stat">
 								<span class="stat-label">Tokens</span>
-								<span class="stat-value stat-value--dark">{totalTokensEstimated}</span>
+								<span class="stat-value stat-value--dark">{totalTokens}</span>
 							</span>
-							{#if metadataComputing}
+							{#if chunksComputing}
 								<span class="spinner"></span>
 							{/if}
 						</div>
@@ -211,7 +198,7 @@
 
 			{#if text !== '' && !isEditing}
 				<ChunkDisplay
-					{chunks}
+					chunks={chunks.map((c) => c.text)}
 					{getMetadata}
 					{hoveredChunk}
 					{selectedChunk}
@@ -225,8 +212,8 @@
 	{#if selectedChunk !== null && chunks[selectedChunk]}
 		<ChunkDetailPanel
 			index={selectedChunk}
-			chunk={chunks[selectedChunk]}
-			metadata={getMetadata(selectedChunk, chunks[selectedChunk])}
+			chunk={chunks[selectedChunk].text}
+			metadata={getMetadata(selectedChunk)}
 			maxTokens={settings.tokenizer.maxTokens}
 			onclose={() => (selectedChunk = null)}
 		/>

@@ -66,12 +66,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="panel" data-side-panel onclick={(e) => e.stopPropagation()}>
 	<div class="panel-header">
-		<h4 class="panel-title">
-			Chunk {index + 1}
-			{#if metadata.isEstimated}
-				<span class="estimated">~est</span>
-			{/if}
-		</h4>
+		<h4 class="panel-title">Chunk {index + 1}</h4>
 		<button class="panel-close" onclick={onclose}>×</button>
 	</div>
 
@@ -177,12 +172,6 @@
 		margin: 0;
 		font-size: var(--font-size-lg);
 		color: var(--color-dark);
-	}
-
-	.estimated {
-		font-size: var(--font-size-xs);
-		color: var(--color-warning);
-		font-weight: normal;
 	}
 
 	.panel-close {

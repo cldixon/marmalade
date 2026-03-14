@@ -4,7 +4,7 @@
 	/**
 	 * @type {{
 	 *   chunks: string[],
-	 *   getMetadata: (idx: number, chunk: string) => import('$lib/utils/chunking.js').ChunkMetadata,
+	 *   getMetadata: (idx: number) => import('$lib/utils/chunking.js').ChunkMetadata | null,
 	 *   hoveredChunk: number | null,
 	 *   selectedChunk: number | null,
 	 *   onhover: (idx: number | null) => void,
@@ -25,7 +25,7 @@
 >
 	{#each chunks as chunk, idx (idx)}
 		{@const isActive = hoveredChunk === idx || selectedChunk === idx}
-		{@const metadata = getMetadata(idx, chunk)}
+		{@const metadata = getMetadata(idx)}
 
 		<span
 			role="button"
