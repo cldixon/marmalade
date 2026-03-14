@@ -6,10 +6,11 @@
 	 *   text: string,
 	 *   isEditing: boolean,
 	 *   onchange: (text: string) => void,
-	 *   ontoggleedit: () => void
+	 *   ontoggleedit: () => void,
+	 *   headerMode?: boolean
 	 * }}
 	 */
-	let { text, isEditing, onchange, ontoggleedit } = $props();
+	let { text, isEditing, onchange, ontoggleedit, headerMode = false } = $props();
 
 	function handleBlur() {
 		setTimeout(() => {
@@ -24,11 +25,9 @@
 	}
 </script>
 
-<div class="text-input-header">
-	<h3 class="text-input-title">
-		{text === '' ? 'Enter Text' : isEditing ? 'Edit Text' : 'Text'}
-	</h3>
-	<div class="text-input-actions">
+{#if headerMode}
+	<!-- Render just the action buttons (for embedding in a content header) -->
+	<div class="header-actions">
 		<button class="btn btn--accent" onclick={loadSample}>Load Sample</button>
 		{#if text !== ''}
 			<button class="btn btn--primary" onclick={ontoggleedit}>
@@ -36,55 +35,46 @@
 			</button>
 		{/if}
 	</div>
-</div>
-
-{#if text === '' || isEditing}
-	<div>
-		<textarea
-			value={text}
-			oninput={(e) => onchange(e.target.value)}
-			onblur={handleBlur}
-			placeholder="Paste your text here..."
-			class="textarea"
-		></textarea>
-		<div class="text-meta">
-			{#if text === ''}
-				Paste text above or click "Load Sample" to get started
-			{:else}
-				{text.length} characters · {text.split(/\s+/).filter((w) => w).length} words
-			{/if}
+{:else}
+	<!-- Render the textarea area -->
+	{#if text === '' || isEditing}
+		<div class="textarea-wrap">
+			<textarea
+				value={text}
+				oninput={(e) => onchange(e.target.value)}
+				onblur={handleBlur}
+				placeholder="Paste your text here..."
+				class="textarea"
+			></textarea>
+			<div class="text-meta">
+				{#if text === ''}
+					Paste text above or click "Load Sample" to get started
+				{:else}
+					{text.length} characters · {text.split(/\s+/).filter((w) => w).length} words
+				{/if}
+			</div>
 		</div>
-	</div>
+	{/if}
 {/if}
 
 <style>
-	.text-input-header {
+	.header-actions {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--space-md);
-	}
-
-	.text-input-title {
-		margin: 0;
-		color: var(--color-dark);
-		font-size: var(--font-size-base);
-	}
-
-	.text-input-actions {
-		display: flex;
-		gap: var(--space-sm);
+		gap: 8px;
 	}
 
 	.btn {
-		padding: var(--space-sm) var(--space-md);
+		padding: 7px 14px;
 		border: none;
 		border-radius: var(--radius-md);
 		cursor: pointer;
-		font-size: var(--font-size-sm);
-		font-weight: 500;
+		font-family: var(--font-base);
+		font-size: 12px;
+		font-weight: 600;
 		color: white;
+		line-height: 16px;
 		transition: opacity var(--transition-fast);
+		white-space: nowrap;
 	}
 
 	.btn:hover {
@@ -99,17 +89,24 @@
 		background-color: var(--color-accent);
 	}
 
+	.textarea-wrap {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+
 	.textarea {
 		width: 100%;
-		height: 400px;
+		flex: 1;
+		min-height: 200px;
 		padding: var(--space-md);
 		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
-		font-size: var(--font-size-base);
 		font-family: var(--font-base);
+		font-size: 14px;
 		resize: vertical;
 		box-sizing: border-box;
-		line-height: 1.7;
+		line-height: 24px;
 		color: var(--color-dark);
 		background-color: white;
 	}
@@ -121,7 +118,7 @@
 
 	.text-meta {
 		margin-top: var(--space-sm);
-		font-size: var(--font-size-xs);
-		color: var(--color-muted);
+		font-size: 10px;
+		color: var(--color-muted-warm);
 	}
 </style>

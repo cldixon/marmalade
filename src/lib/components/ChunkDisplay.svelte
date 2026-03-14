@@ -4,7 +4,7 @@
 	/**
 	 * @type {{
 	 *   chunks: string[],
-	 *   getMetadata: (idx: number, chunk: string) => import('$lib/utils/chunking.js').ChunkMetadata,
+	 *   getMetadata: (idx: number) => import('$lib/utils/chunking.js').ChunkMetadata | null,
 	 *   hoveredChunk: number | null,
 	 *   selectedChunk: number | null,
 	 *   onhover: (idx: number | null) => void,
@@ -25,7 +25,7 @@
 >
 	{#each chunks as chunk, idx (idx)}
 		{@const isActive = hoveredChunk === idx || selectedChunk === idx}
-		{@const metadata = getMetadata(idx, chunk)}
+		{@const metadata = getMetadata(idx)}
 
 		<span
 			role="button"
@@ -57,30 +57,31 @@
 
 <style>
 	.chunk-display {
-		font-size: var(--font-size-base);
-		line-height: 1.8;
+		font-family: var(--font-base);
+		font-size: 14px;
+		line-height: 24px;
 		color: var(--color-dark);
-		white-space: pre-wrap;
-		word-wrap: break-word;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 
 	.chunk {
-		border-radius: var(--radius-sm);
+		border-radius: 10px;
 		transition: all var(--transition-base);
 		cursor: pointer;
-		display: inline-block;
+		display: block;
 		position: relative;
-		padding: var(--space-xs) var(--space-sm);
-		margin-bottom: var(--space-xs);
+		padding: 10px 14px;
 	}
 
 	.chunk--even {
-		background-color: #fff3e0;
+		background-color: var(--color-chunk-even);
 		border-left: 3px solid var(--color-primary);
 	}
 
 	.chunk--odd {
-		background-color: #e8eaf6;
+		background-color: var(--color-chunk-odd);
 		border-left: 3px solid var(--color-accent);
 	}
 
@@ -90,11 +91,11 @@
 
 	.chunk--active.chunk--even {
 		border-left-width: 4px;
-		background-color: #ffe0b2;
+		background-color: var(--color-chunk-even-active);
 	}
 
 	.chunk--active.chunk--odd {
 		border-left-width: 4px;
-		background-color: #c5cae9;
+		background-color: var(--color-chunk-odd-active);
 	}
 </style>

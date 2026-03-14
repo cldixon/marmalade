@@ -182,7 +182,7 @@ class TokenizerService {
 			return_offsets_mapping: true
 		});
 
-		const inputIds = Array.from(encoded.input_ids.data);
+		const inputIds = Array.from(encoded.input_ids.data).map(Number);
 		const tokens = inputIds.map((id) => tokenizer.decode([id]));
 
 		// Get offset mapping if available
@@ -224,6 +224,23 @@ class TokenizerService {
 	}
 
 	/**
+	 * Get the character position in the original text corresponding to a token boundary.
+	 * Decodes tokens[0..tokenIndex] and returns the decoded text length,
+	 * which equals the character position in the original text.
+	 *
+	 * @param {number[]} tokenIds - Full array of token IDs (as Numbers)
+	 * @param {number} tokenIndex - Token boundary index
+	 * @param {string} tokenizerId - The tokenizer ID
+	 * @returns {Promise<number>} Character position in original text
+	 */
+	async getCharBoundary(tokenIds, tokenIndex, tokenizerId) {
+		if (tokenIndex <= 0) return 0;
+		const tokenizer = await this.load(tokenizerId);
+		const decoded = tokenizer.decode(tokenIds.slice(0, tokenIndex), { skip_special_tokens: true });
+		return decoded.length;
+	}
+
+	/**
 	 * Clear the tokenizer cache (useful for memory management).
 	 */
 	clearCache() {
@@ -241,6 +258,8 @@ export const loadTokenizer = (tokenizerId) => tokenizerService.load(tokenizerId)
 export const isTokenizerLoaded = (tokenizerId) => tokenizerService.isLoaded(tokenizerId);
 export const isTokenizerLoading = (tokenizerId) => tokenizerService.isLoading(tokenizerId);
 export const getTokenizerConfig = (tokenizerId) => tokenizerService.getConfig(tokenizerId);
+export const getCharBoundary = (tokenIds, tokenIndex, tokenizerId) =>
+	tokenizerService.getCharBoundary(tokenIds, tokenIndex, tokenizerId);
 
 /**
  * @typedef {Object} TokenizationResult

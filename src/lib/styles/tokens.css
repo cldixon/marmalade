@@ -1,16 +1,35 @@
 /* Marmalade Design Tokens */
-/* Classic Paddington theme — orange, blue, warm brown */
+/* Paddington-inspired palette: bright orange, bold blue, warm brown */
+/* Extended with garden green + lavender accents from classic illustrations */
 
 :root {
-	/* Colors — Primary palette */
-	--color-primary: #ff8c42;
-	--color-accent: #1e40af;
-	--color-dark: #4a3728;
-	--color-light: #fff8e7;
-	--color-bg: #fffbf5;
+	/* Colors — Primary palette (Paddington identity) */
+	--color-primary: #ff8c42;       /* Marmalade orange */
+	--color-accent: #1e40af;        /* Paddington's coat blue */
+	--color-dark: #4a3728;          /* Paddington's fur brown */
+	--color-light: #fff8e7;         /* Warm parchment */
+	--color-bg: #fffbf5;            /* Warm background */
 	--color-card: #ffffff;
-	--color-border: #f0e6d6;
+	--color-border: #f0e6d6;        /* Warm border */
 	--color-muted: #6b7280;
+	--color-muted-warm: #c4a882;    /* Warm muted for labels in config */
+	--color-subtitle: #9a8576;      /* Subtitle text */
+	--color-brown: #8b5e3c;         /* Paddington's fur — warm mid-brown */
+
+	/* Colors — Extended palette */
+	--color-blue-light: #A3BDD3;    /* Angel Falls — hover states, extended use */
+	--color-green: #7cb688;         /* Paddington's garden — soft sage green */
+	--color-green-light: #d4edda;   /* Light garden green */
+	--color-lavender: #9b8ec4;      /* Paint palette — playful purple */
+	--color-lavender-light: #e8e0f0; /* Light lavender */
+	--color-chunk-even: #fff3e0;    /* Even chunk background (warm orange tint) */
+	--color-chunk-even-active: #ffe0b2; /* Even chunk active (orange highlight) */
+	--color-chunk-odd: #e8eaf6;     /* Odd chunk background (blue tint) */
+	--color-chunk-odd-active: #c5cae9;  /* Odd chunk active (blue highlight) */
+	--color-error-bg: #fee2e2;      /* Error surface */
+	--color-error-text: #991b1b;    /* Error text */
+	--color-success-bg: #d1fae5;    /* Success surface */
+	--color-backdrop: rgba(74, 55, 40, 0.4); /* Modal backdrop (warm brown) */
 
 	/* Colors — Semantic */
 	--color-success: #10b981;
@@ -18,7 +37,8 @@
 	--color-error: #ef4444;
 
 	/* Typography */
-	--font-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-display: 'Fraunces', Georgia, serif;
+	--font-base: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Menlo, Consolas,
 		'Courier New', monospace;
 	--font-size-xs: 0.75rem;
@@ -38,7 +58,7 @@
 	/* Radii */
 	--radius-sm: 4px;
 	--radius-md: 8px;
-	--radius-lg: 12px;
+	--radius-lg: 14px;
 
 	/* Shadows */
 	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -46,8 +66,7 @@
 	--shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
 
 	/* Layout */
-	--sidebar-width: 280px;
-	--max-width: 1400px;
+	--max-width: 1200px;
 
 	/* Transitions */
 	--transition-fast: 0.15s ease;

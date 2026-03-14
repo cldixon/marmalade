@@ -8,7 +8,6 @@
 
 <span class="tooltip">
 	Chunk {index + 1} · {metadata.tokens} tokens
-	{#if metadata.isEstimated}<span class="est">~</span>{/if}
 </span>
 
 <style>
@@ -29,7 +28,4 @@
 		pointer-events: none;
 	}
 
-	.est {
-		color: var(--color-warning);
-	}
 </style>

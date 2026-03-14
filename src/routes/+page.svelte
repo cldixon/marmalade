@@ -4,20 +4,20 @@
 	import { apiKey } from '$lib/stores/apikey.svelte.js';
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import {
-		calculateChunks,
-		getChunkMetadata,
-		computeAllChunkMetadata
+		calculateChunksReal,
+		buildChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
+	import { getRandomSample } from '$lib/data/samples.js';
 
 	import Header from '$lib/components/Header.svelte';
-	import TokenizerPanel from '$lib/components/TokenizerPanel.svelte';
+	import WelcomeBanner from '$lib/components/WelcomeBanner.svelte';
+	import ConfigBar from '$lib/components/ConfigBar.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import StatsBar from '$lib/components/StatsBar.svelte';
 	import TextInput from '$lib/components/TextInput.svelte';
 	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
 	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
-	import PrivacyNotice from '$lib/components/PrivacyNotice.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 
 	// --- Local state (UI-only, not shared) ---
 	let text = $state('');
@@ -25,28 +25,30 @@
 	let hoveredChunk = $state(null);
 	let selectedChunk = $state(null);
 	let isEditing = $state(false);
+	let welcomeDismissed = $state(false);
 
 	// Tokenizer loading state
 	let tokenizerLoading = $state(false);
 	let tokenizerReady = $state(false);
 	let tokenizerError = $state(null);
 
-	// Chunk metadata
-	/** @type {Map<number, import('$lib/utils/chunking.js').ChunkMetadata>} */
-	let chunkMetadataMap = $state(new Map());
-	let metadataComputing = $state(false);
+	// Chunk computation state
+	/** @type {{ chunks: import('$lib/utils/chunking.js').ChunkInfo[], totalTokens: number, tokenization: any } | null} */
+	let chunkResult = $state(null);
+	let chunksComputing = $state(false);
+	let chunkGeneration = 0;
 
 	// --- Derived (from settings store) ---
 	let currentTokenizer = $derived(
 		tokenizers.find((t) => t.id === settings.tokenizer.modelId)
 	);
-	let chunks = $derived(
-		calculateChunks(
-			text,
-			settings.tokenizer.strategy,
-			settings.tokenizer.maxTokens,
-			settings.tokenizer.overlap
-		)
+	let chunks = $derived(chunkResult?.chunks ?? []);
+	let totalTokens = $derived(chunkResult?.totalTokens ?? 0);
+	let totalWords = $derived(
+		chunks.reduce((sum, c) => sum + c.text.split(/\s+/).length, 0)
+	);
+	let avgWords = $derived(
+		chunks.length > 0 ? Math.round(totalWords / chunks.length) : 0
 	);
 
 	// --- Tokenizer management ---
@@ -66,39 +68,21 @@
 		}
 	}
 
-	async function updateChunkMetadata() {
-		if (!tokenizerReady || chunks.length === 0) {
-			chunkMetadataMap = new Map();
-			return;
-		}
-
-		metadataComputing = true;
-		try {
-			chunkMetadataMap = await computeAllChunkMetadata(
-				chunks,
-				settings.tokenizer.strategy,
-				settings.tokenizer.maxTokens,
-				settings.tokenizer.overlap,
-				settings.tokenizer.modelId
-			);
-		} catch (err) {
-			console.error('Failed to compute chunk metadata:', err);
-			chunkMetadataMap = new Map();
-		} finally {
-			metadataComputing = false;
-		}
-	}
-
-	function getMetadata(idx, chunk) {
-		if (chunkMetadataMap.has(idx)) {
-			return chunkMetadataMap.get(idx);
-		}
-		return getChunkMetadata(
-			chunk,
+	function getMetadata(idx) {
+		if (!chunks[idx]) return null;
+		return buildChunkMetadata(
+			chunks[idx],
 			settings.tokenizer.strategy,
 			settings.tokenizer.maxTokens,
 			settings.tokenizer.overlap
 		);
+	}
+
+	function dismissWelcome() {
+		if (!welcomeDismissed) {
+			welcomeDismissed = true;
+			localStorage.setItem('marmalade_welcomed', 'true');
+		}
 	}
 
 	// --- Event handlers ---
@@ -116,6 +100,15 @@
 		document.addEventListener('click', handleGlobalClick);
 		apiKey.load();
 		initTokenizer(settings.tokenizer.modelId);
+
+		// Auto-load sample text on first visit
+		if (!localStorage.getItem('marmalade_welcomed')) {
+			const sample = getRandomSample();
+			text = sample.text;
+		} else {
+			welcomeDismissed = true;
+		}
+
 		return () => document.removeEventListener('click', handleGlobalClick);
 	});
 
@@ -125,16 +118,42 @@
 		initTokenizer(modelId);
 	});
 
-	// Recompute metadata when chunks or tokenizer readiness changes
+	// Compute chunks using real tokenization
 	$effect(() => {
-		if (tokenizerReady && chunks.length > 0) {
-			updateChunkMetadata();
+		const currentText = text;
+		const { strategy, maxTokens, overlap, overlapStrategy, minChunkSize, modelId } = settings.tokenizer;
+		const ready = tokenizerReady;
+
+		if (!ready || !currentText) {
+			chunkResult = null;
+			return;
 		}
+
+		const gen = ++chunkGeneration;
+		chunksComputing = true;
+
+		calculateChunksReal(currentText, strategy, maxTokens, overlap, overlapStrategy, modelId, minChunkSize)
+			.then((result) => {
+				if (gen !== chunkGeneration) return;
+				chunkResult = result;
+			})
+			.catch((err) => {
+				if (gen !== chunkGeneration) return;
+				console.error('Failed to compute chunks:', err);
+				chunkResult = null;
+			})
+			.finally(() => {
+				if (gen === chunkGeneration) chunksComputing = false;
+			});
 	});
 </script>
 
 <div class="app">
 	<Header onopenSettings={() => (settingsModalOpen = true)} />
+
+	{#if !welcomeDismissed}
+		<WelcomeBanner ondismiss={dismissWelcome} />
+	{/if}
 
 	{#if tokenizerLoading}
 		<div class="loading-banner">
@@ -150,42 +169,71 @@
 	{/if}
 
 	<div class="body">
-		<TokenizerPanel {tokenizerLoading} {tokenizerReady} />
+		<ConfigBar {tokenizerLoading} {tokenizerReady} />
 
-		<main class="main">
-			<StatsBar
-				{chunks}
-				{metadataComputing}
-				metadataReady={chunkMetadataMap.size > 0}
+		<div class="content-card">
+			<div class="content-header">
+				<div class="content-header-left">
+					<h2 class="content-title">{chunks.length > 0 ? 'Chunks' : 'Text'}</h2>
+					{#if chunks.length > 0}
+						<div class="stats-pill">
+							<span class="stat">
+								<span class="stat-label">Chunks</span>
+								<span class="stat-value stat-value--primary">{chunks.length}</span>
+							</span>
+							<span class="stat-divider"></span>
+							<span class="stat">
+								<span class="stat-label">Avg</span>
+								<span class="stat-value stat-value--accent">{avgWords}w</span>
+							</span>
+							<span class="stat-divider"></span>
+							<span class="stat">
+								<span class="stat-label">Tokens</span>
+								<span class="stat-value stat-value--brown">{totalTokens}</span>
+							</span>
+							{#if chunksComputing}
+								<span class="spinner"></span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<div class="content-actions">
+					<TextInput
+						{text}
+						{isEditing}
+						onchange={(val) => { text = val; dismissWelcome(); }}
+						ontoggleedit={() => (isEditing = !isEditing)}
+						headerMode={true}
+					/>
+				</div>
+			</div>
+
+			<TextInput
+				{text}
+				{isEditing}
+				onchange={(val) => { text = val; dismissWelcome(); }}
+				ontoggleedit={() => (isEditing = !isEditing)}
 			/>
 
-			<div class="content-card">
-				<TextInput
-					{text}
-					{isEditing}
-					onchange={(val) => (text = val)}
-					ontoggleedit={() => (isEditing = !isEditing)}
+			{#if text !== '' && !isEditing}
+				<ChunkDisplay
+					chunks={chunks.map((c) => c.text)}
+					{getMetadata}
+					{hoveredChunk}
+					{selectedChunk}
+					onhover={(idx) => (hoveredChunk = idx)}
+					onselect={(idx) => (selectedChunk = idx)}
 				/>
-
-				{#if text !== '' && !isEditing}
-					<ChunkDisplay
-						{chunks}
-						{getMetadata}
-						{hoveredChunk}
-						{selectedChunk}
-						onhover={(idx) => (hoveredChunk = idx)}
-						onselect={(idx) => (selectedChunk = idx)}
-					/>
-				{/if}
-			</div>
-		</main>
+			{/if}
+		</div>
 	</div>
 
 	{#if selectedChunk !== null && chunks[selectedChunk]}
 		<ChunkDetailPanel
 			index={selectedChunk}
-			chunk={chunks[selectedChunk]}
-			metadata={getMetadata(selectedChunk, chunks[selectedChunk])}
+			chunk={chunks[selectedChunk].text}
+			metadata={getMetadata(selectedChunk)}
 			maxTokens={settings.tokenizer.maxTokens}
 			onclose={() => (selectedChunk = null)}
 		/>
@@ -196,7 +244,7 @@
 		onclose={() => (settingsModalOpen = false)}
 	/>
 
-	<PrivacyNotice />
+	<Footer />
 </div>
 
 <style>
@@ -210,50 +258,135 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
-		padding: var(--space-sm) var(--space-xl);
+		padding: var(--space-sm) 48px;
 		background-color: var(--color-light);
 		border-bottom: 1px solid var(--color-border);
-		font-size: var(--font-size-sm);
+		font-size: 12px;
 		color: var(--color-dark);
 	}
 
 	.error-banner {
-		padding: var(--space-sm) var(--space-xl);
-		background-color: #fee2e2;
+		padding: var(--space-sm) 48px;
+		background-color: var(--color-error-bg);
 		border-bottom: 1px solid var(--color-error);
-		font-size: var(--font-size-sm);
-		color: #991b1b;
+		font-size: 12px;
+		color: var(--color-error-text);
 		font-weight: 500;
 	}
 
 	.body {
 		flex: 1;
 		display: flex;
-		min-height: 0;
-	}
-
-	.main {
-		flex: 1;
-		padding: var(--space-lg) var(--space-xl);
-		min-width: 0;
-		overflow-y: auto;
+		flex-direction: column;
+		padding: 24px 48px;
+		gap: 16px;
+		max-width: var(--max-width);
+		width: 100%;
+		margin: 0 auto;
 	}
 
 	.content-card {
+		flex: 1;
 		background-color: var(--color-card);
 		border-radius: var(--radius-lg);
-		padding: var(--space-lg);
+		padding: 24px 28px;
 		border: 1px solid var(--color-border);
-		min-height: 400px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.content-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.content-header-left {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.content-title {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--color-dark);
+		line-height: 18px;
+	}
+
+	.stats-pill {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		background-color: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 4px 14px;
+	}
+
+	.stat {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.stat-label {
+		font-family: var(--font-base);
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted-warm);
+		line-height: 12px;
+	}
+
+	.stat-value {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		font-weight: 700;
+		line-height: 18px;
+	}
+
+	.stat-value--primary {
+		color: var(--color-primary);
+	}
+
+	.stat-value--accent {
+		color: var(--color-accent);
+	}
+
+	.stat-value--brown {
+		color: var(--color-brown);
+	}
+
+	.stat-divider {
+		width: 1px;
+		height: 14px;
+		background-color: var(--color-border);
+	}
+
+	.content-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	@media (max-width: 768px) {
 		.body {
-			flex-direction: column;
+			padding: 16px;
 		}
 
-		.main {
-			padding: var(--space-md);
+		.content-card {
+			padding: 16px;
+		}
+
+		.content-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: var(--space-sm);
 		}
 	}
 </style>
