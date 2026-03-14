@@ -245,13 +245,15 @@ function skipLeadingWhitespace(text, pos) {
  *
  * @param {ChunkInfo[]} chunks - Array of chunk objects
  * @param {number} minChunkSize - Minimum token count threshold
+ * @param {number} maxTokens - Maximum tokens per chunk (merge skipped if it would exceed this)
  * @returns {ChunkInfo[]} Chunks with small trailing chunk merged
  */
-export function mergeSmallTrailingChunk(chunks, minChunkSize) {
+export function mergeSmallTrailingChunk(chunks, minChunkSize, maxTokens) {
 	if (minChunkSize <= 0 || chunks.length < 2) return chunks;
 
 	const lastChunk = chunks[chunks.length - 1];
-	if (lastChunk.tokenCount < minChunkSize) {
+	const prevChunk = chunks[chunks.length - 2];
+	if (lastChunk.tokenCount < minChunkSize && prevChunk.tokenCount + lastChunk.tokenCount <= maxTokens) {
 		const merged = [...chunks];
 		const removed = merged.pop();
 		const prev = merged[merged.length - 1];

@@ -1,5 +1,5 @@
 <footer class="footer">
-	<span>All tokenization happens in the browser. Your text never leaves your device. © 2026 CL Dixon</span>
+	<span>All tokenization happens in the browser. Text never leaves your device. © 2026 CL Dixon</span>
 </footer>
 
 <style>

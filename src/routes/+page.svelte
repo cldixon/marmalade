@@ -136,7 +136,7 @@
 		calculateChunksReal(currentText, strategy, maxTokens, overlap, overlapStrategy, modelId)
 			.then((result) => {
 				if (gen !== chunkGeneration) return;
-				result.chunks = mergeSmallTrailingChunk(result.chunks, minChunkSize);
+				result.chunks = mergeSmallTrailingChunk(result.chunks, minChunkSize, maxTokens);
 				result.totalTokens = result.chunks.reduce((s, c) => s + c.tokenCount, 0);
 				chunkResult = result;
 			})
