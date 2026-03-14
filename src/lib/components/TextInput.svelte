@@ -38,7 +38,7 @@
 {:else}
 	<!-- Render the textarea area -->
 	{#if text === '' || isEditing}
-		<div>
+		<div class="textarea-wrap">
 			<textarea
 				value={text}
 				oninput={(e) => onchange(e.target.value)}
@@ -89,9 +89,16 @@
 		background-color: var(--color-accent);
 	}
 
+	.textarea-wrap {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+
 	.textarea {
 		width: 100%;
-		height: 400px;
+		flex: 1;
+		min-height: 200px;
 		padding: var(--space-md);
 		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
