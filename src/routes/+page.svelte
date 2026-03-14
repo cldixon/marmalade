@@ -249,7 +249,7 @@
 
 <style>
 	.app {
-		height: 100vh;
+		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
 	}
@@ -280,8 +280,6 @@
 		flex-direction: column;
 		padding: 24px 48px;
 		gap: 16px;
-		min-height: 0;
-		overflow-y: auto;
 		max-width: var(--max-width);
 		width: 100%;
 		margin: 0 auto;
@@ -289,7 +287,6 @@
 
 	.content-card {
 		flex: 1;
-		min-height: 0;
 		background-color: var(--color-card);
 		border-radius: var(--radius-lg);
 		padding: 24px 28px;

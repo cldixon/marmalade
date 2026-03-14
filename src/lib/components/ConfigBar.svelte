@@ -216,9 +216,8 @@
 	}
 
 	.config-section--slider {
-		width: calc((100% - 48px - 2px) / 3); /* 3 equal slots; subtract gaps + dividers */
-		flex-shrink: 0;
-		flex-grow: 0;
+		flex: 1;
+		min-width: 0;
 		gap: 12px;
 	}
 
