@@ -7,7 +7,9 @@ export const settings = $state({
 		modelId: 'mpnet',
 		strategy: 'tokens',
 		maxTokens: 384,
-		overlap: 0
+		overlap: 0,
+		minChunkSize: 0,
+		overlapStrategy: 'token'
 	},
 	embedding: {
 		model: 'text-embedding-3-small',

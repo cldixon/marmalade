@@ -57,21 +57,22 @@
 
 <style>
 	.chunk-display {
-		font-size: var(--font-size-base);
-		line-height: 1.8;
+		font-family: var(--font-base);
+		font-size: 14px;
+		line-height: 24px;
 		color: var(--color-dark);
-		white-space: pre-wrap;
-		word-wrap: break-word;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 
 	.chunk {
-		border-radius: var(--radius-sm);
+		border-radius: 10px;
 		transition: all var(--transition-base);
 		cursor: pointer;
-		display: inline-block;
+		display: block;
 		position: relative;
-		padding: var(--space-xs) var(--space-sm);
-		margin-bottom: var(--space-xs);
+		padding: 10px 14px;
 	}
 
 	.chunk--even {

@@ -10,9 +10,10 @@ import { countTokens } from '$lib/tokenizer/index.js';
  * @param {string} strategy - Chunking strategy ('tokens', 'hybrid')
  * @param {number} maxTokens - Maximum tokens per chunk
  * @param {number} overlap - Overlap tokens (for 'tokens' strategy)
+ * @param {string} [overlapStrategy='token'] - Overlap strategy ('token' or 'sentence')
  * @returns {string[]} Array of text chunks
  */
-export function calculateChunks(text, strategy, maxTokens, overlap) {
+export function calculateChunks(text, strategy, maxTokens, overlap, overlapStrategy = 'token') {
 	if (!text) return [];
 
 	let newChunks = [];
@@ -22,9 +23,36 @@ export function calculateChunks(text, strategy, maxTokens, overlap) {
 		// Use 1.3 as rough estimate for initial chunking
 		// Real token counts come from getChunkMetadata
 		const wordsPerChunk = Math.floor(maxTokens / 1.3);
-		for (let i = 0; i < words.length; i += wordsPerChunk - overlap) {
-			const chunk = words.slice(i, i + wordsPerChunk).join(' ');
-			if (chunk.trim()) newChunks.push(chunk);
+
+		if (overlapStrategy === 'sentence' && overlap > 0) {
+			// Sentence-boundary overlap: after each chunk, scan backward
+			// to find the last sentence boundary and start the next chunk there
+			let i = 0;
+			while (i < words.length) {
+				const chunk = words.slice(i, i + wordsPerChunk).join(' ');
+				if (chunk.trim()) newChunks.push(chunk);
+
+				const nextStart = i + wordsPerChunk;
+				if (nextStart >= words.length) break;
+
+				// Look backward from the chunk boundary to find a sentence end
+				const chunkText = words.slice(i, i + wordsPerChunk).join(' ');
+				const sentenceEndMatch = chunkText.match(/.*[.!?]\s*/);
+				if (sentenceEndMatch) {
+					// Find which word index the sentence boundary falls at
+					const boundaryText = sentenceEndMatch[0];
+					const boundaryWordCount = boundaryText.split(/\s+/).length;
+					i = i + boundaryWordCount;
+				} else {
+					// No sentence boundary found, fall back to standard advance
+					i = nextStart;
+				}
+			}
+		} else {
+			for (let i = 0; i < words.length; i += wordsPerChunk - overlap) {
+				const chunk = words.slice(i, i + wordsPerChunk).join(' ');
+				if (chunk.trim()) newChunks.push(chunk);
+			}
 		}
 	} else if (strategy === 'hybrid') {
 		const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
@@ -53,6 +81,26 @@ export function calculateChunks(text, strategy, maxTokens, overlap) {
 	}
 
 	return newChunks;
+}
+
+/**
+ * Merge a small trailing chunk into the previous chunk.
+ * Called as a post-processing step after calculateChunks.
+ *
+ * @param {string[]} chunks - Array of text chunks
+ * @param {number} minChunkSize - Minimum token count threshold
+ * @returns {string[]} Chunks with small trailing chunk merged
+ */
+export function mergeSmallTrailingChunk(chunks, minChunkSize) {
+	if (minChunkSize <= 0 || chunks.length < 2) return chunks;
+	const lastChunk = chunks[chunks.length - 1];
+	const estimatedTokens = Math.ceil(lastChunk.split(/\s+/).length * 1.3);
+	if (estimatedTokens < minChunkSize) {
+		const merged = [...chunks];
+		merged[merged.length - 2] += ' ' + merged.pop();
+		return merged;
+	}
+	return chunks;
 }
 
 /**

@@ -5,15 +5,15 @@
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import {
 		calculateChunks,
+		mergeSmallTrailingChunk,
 		getChunkMetadata,
 		computeAllChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
 
 	import Header from '$lib/components/Header.svelte';
-	import TokenizerPanel from '$lib/components/TokenizerPanel.svelte';
+	import ConfigBar from '$lib/components/ConfigBar.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import StatsBar from '$lib/components/StatsBar.svelte';
 	import TextInput from '$lib/components/TextInput.svelte';
 	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
 	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
@@ -40,13 +40,25 @@
 	let currentTokenizer = $derived(
 		tokenizers.find((t) => t.id === settings.tokenizer.modelId)
 	);
-	let chunks = $derived(
-		calculateChunks(
+	let chunks = $derived.by(() => {
+		const rawChunks = calculateChunks(
 			text,
 			settings.tokenizer.strategy,
 			settings.tokenizer.maxTokens,
-			settings.tokenizer.overlap
-		)
+			settings.tokenizer.overlap,
+			settings.tokenizer.overlapStrategy
+		);
+		return mergeSmallTrailingChunk(rawChunks, settings.tokenizer.minChunkSize);
+	});
+
+	let totalWords = $derived(
+		chunks.reduce((sum, c) => sum + c.split(/\s+/).length, 0)
+	);
+	let avgWords = $derived(
+		chunks.length > 0 ? Math.round(totalWords / chunks.length) : 0
+	);
+	let totalTokensEstimated = $derived(
+		Math.ceil(totalWords * 1.3)
 	);
 
 	// --- Tokenizer management ---
@@ -150,35 +162,64 @@
 	{/if}
 
 	<div class="body">
-		<TokenizerPanel {tokenizerLoading} {tokenizerReady} />
+		<ConfigBar {tokenizerLoading} {tokenizerReady} />
 
-		<main class="main">
-			<StatsBar
-				{chunks}
-				{metadataComputing}
-				metadataReady={chunkMetadataMap.size > 0}
+		<div class="content-card">
+			<div class="content-header">
+				<div class="content-header-left">
+					<h2 class="content-title">{chunks.length > 0 ? 'Chunks' : 'Text'}</h2>
+					{#if chunks.length > 0}
+						<div class="stats-pill">
+							<span class="stat">
+								<span class="stat-label">Chunks</span>
+								<span class="stat-value stat-value--primary">{chunks.length}</span>
+							</span>
+							<span class="stat-divider"></span>
+							<span class="stat">
+								<span class="stat-label">Avg</span>
+								<span class="stat-value stat-value--accent">{avgWords}w</span>
+							</span>
+							<span class="stat-divider"></span>
+							<span class="stat">
+								<span class="stat-label">Tokens</span>
+								<span class="stat-value stat-value--dark">{totalTokensEstimated}</span>
+							</span>
+							{#if metadataComputing}
+								<span class="spinner"></span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<div class="content-actions">
+					<TextInput
+						{text}
+						{isEditing}
+						onchange={(val) => (text = val)}
+						ontoggleedit={() => (isEditing = !isEditing)}
+						headerMode={true}
+					/>
+				</div>
+			</div>
+
+			<TextInput
+				{text}
+				{isEditing}
+				onchange={(val) => (text = val)}
+				ontoggleedit={() => (isEditing = !isEditing)}
 			/>
 
-			<div class="content-card">
-				<TextInput
-					{text}
-					{isEditing}
-					onchange={(val) => (text = val)}
-					ontoggleedit={() => (isEditing = !isEditing)}
+			{#if text !== '' && !isEditing}
+				<ChunkDisplay
+					{chunks}
+					{getMetadata}
+					{hoveredChunk}
+					{selectedChunk}
+					onhover={(idx) => (hoveredChunk = idx)}
+					onselect={(idx) => (selectedChunk = idx)}
 				/>
-
-				{#if text !== '' && !isEditing}
-					<ChunkDisplay
-						{chunks}
-						{getMetadata}
-						{hoveredChunk}
-						{selectedChunk}
-						onhover={(idx) => (hoveredChunk = idx)}
-						onselect={(idx) => (selectedChunk = idx)}
-					/>
-				{/if}
-			</div>
-		</main>
+			{/if}
+		</div>
 	</div>
 
 	{#if selectedChunk !== null && chunks[selectedChunk]}
@@ -210,18 +251,18 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-sm);
-		padding: var(--space-sm) var(--space-xl);
+		padding: var(--space-sm) 48px;
 		background-color: var(--color-light);
 		border-bottom: 1px solid var(--color-border);
-		font-size: var(--font-size-sm);
+		font-size: 12px;
 		color: var(--color-dark);
 	}
 
 	.error-banner {
-		padding: var(--space-sm) var(--space-xl);
+		padding: var(--space-sm) 48px;
 		background-color: var(--color-error-bg);
 		border-bottom: 1px solid var(--color-error);
-		font-size: var(--font-size-sm);
+		font-size: 12px;
 		color: var(--color-error-text);
 		font-weight: 500;
 	}
@@ -229,31 +270,118 @@
 	.body {
 		flex: 1;
 		display: flex;
+		flex-direction: column;
+		padding: 24px 48px;
+		gap: 16px;
 		min-height: 0;
-	}
-
-	.main {
-		flex: 1;
-		padding: var(--space-lg) var(--space-xl);
-		min-width: 0;
 		overflow-y: auto;
+		max-width: var(--max-width);
+		width: 100%;
+		margin: 0 auto;
 	}
 
 	.content-card {
+		flex: 1;
 		background-color: var(--color-card);
 		border-radius: var(--radius-lg);
-		padding: var(--space-lg);
+		padding: 24px 28px;
 		border: 1px solid var(--color-border);
-		min-height: 400px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.content-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.content-header-left {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.content-title {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--color-dark);
+		line-height: 18px;
+	}
+
+	.stats-pill {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		background-color: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 4px 14px;
+	}
+
+	.stat {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.stat-label {
+		font-family: var(--font-base);
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--color-muted-warm);
+		line-height: 12px;
+	}
+
+	.stat-value {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		font-weight: 700;
+		line-height: 18px;
+	}
+
+	.stat-value--primary {
+		color: var(--color-primary);
+	}
+
+	.stat-value--accent {
+		color: var(--color-accent);
+	}
+
+	.stat-value--dark {
+		color: var(--color-dark);
+	}
+
+	.stat-divider {
+		width: 1px;
+		height: 14px;
+		background-color: var(--color-border);
+	}
+
+	.content-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	@media (max-width: 768px) {
 		.body {
-			flex-direction: column;
+			padding: 16px;
 		}
 
-		.main {
-			padding: var(--space-md);
+		.content-card {
+			padding: 16px;
+		}
+
+		.content-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: var(--space-sm);
 		}
 	}
 </style>
