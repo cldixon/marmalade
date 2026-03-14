@@ -17,6 +17,7 @@
 	import ChunkDisplay from '$lib/components/ChunkDisplay.svelte';
 	import ChunkDetailPanel from '$lib/components/ChunkDetailPanel.svelte';
 	import PrivacyNotice from '$lib/components/PrivacyNotice.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 
 	// --- Local state (UI-only, not shared) ---
 	let text = $state('');
@@ -169,7 +170,7 @@
 							<span class="stat-divider"></span>
 							<span class="stat">
 								<span class="stat-label">Tokens</span>
-								<span class="stat-value stat-value--dark">{totalTokens}</span>
+								<span class="stat-value stat-value--brown">{totalTokens}</span>
 							</span>
 							{#if chunksComputing}
 								<span class="spinner"></span>
@@ -225,6 +226,7 @@
 	/>
 
 	<PrivacyNotice />
+	<Footer />
 </div>
 
 <style>
@@ -340,8 +342,8 @@
 		color: var(--color-accent);
 	}
 
-	.stat-value--dark {
-		color: var(--color-dark);
+	.stat-value--brown {
+		color: var(--color-brown);
 	}
 
 	.stat-divider {
