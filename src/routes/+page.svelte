@@ -249,11 +249,9 @@
 
 <style>
 	.app {
-		min-height: 100vh;
-		max-height: 100vh;
+		height: 100vh;
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
 	}
 
 	.loading-banner {
@@ -291,6 +289,7 @@
 
 	.content-card {
 		flex: 1;
+		min-height: 0;
 		background-color: var(--color-card);
 		border-radius: var(--radius-lg);
 		padding: 24px 28px;
