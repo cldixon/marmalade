@@ -5,7 +5,6 @@
 	import { tokenizers } from '$lib/utils/tokenizers.js';
 	import {
 		calculateChunksReal,
-		mergeSmallTrailingChunk,
 		buildChunkMetadata
 	} from '$lib/utils/chunking.js';
 	import { loadTokenizer } from '$lib/tokenizer/index.js';
@@ -133,11 +132,9 @@
 		const gen = ++chunkGeneration;
 		chunksComputing = true;
 
-		calculateChunksReal(currentText, strategy, maxTokens, overlap, overlapStrategy, modelId)
+		calculateChunksReal(currentText, strategy, maxTokens, overlap, overlapStrategy, modelId, minChunkSize)
 			.then((result) => {
 				if (gen !== chunkGeneration) return;
-				result.chunks = mergeSmallTrailingChunk(result.chunks, minChunkSize, maxTokens);
-				result.totalTokens = result.chunks.reduce((s, c) => s + c.tokenCount, 0);
 				chunkResult = result;
 			})
 			.catch((err) => {

@@ -13,7 +13,7 @@ import { tokenize, getCharBoundary } from '$lib/tokenizer/index.js';
  * @param {string} tokenizerId - The tokenizer ID to use
  * @returns {Promise<ChunkResult>}
  */
-export async function calculateChunksReal(text, strategy, maxTokens, overlap, overlapStrategy = 'token', tokenizerId) {
+export async function calculateChunksReal(text, strategy, maxTokens, overlap, overlapStrategy = 'token', tokenizerId, minChunkSize = 0) {
 	if (!text) return { chunks: [], totalTokens: 0, tokenization: null };
 
 	const tokenization = await tokenize(text, tokenizerId);
@@ -34,6 +34,8 @@ export async function calculateChunksReal(text, strategy, maxTokens, overlap, ov
 	} else if (strategy === 'hybrid') {
 		chunks = await chunkHybrid(text, tokenIds, tokenCount, maxTokens, tokenizerId);
 	}
+
+	chunks = await padSmallTrailingChunk(chunks, minChunkSize, maxTokens, tokenIds, tokenizerId, text);
 
 	const totalTokens = chunks.reduce((s, c) => s + c.tokenCount, 0);
 	return { chunks, totalTokens, tokenization };
@@ -240,34 +242,87 @@ function skipLeadingWhitespace(text, pos) {
 }
 
 /**
- * Merge a small trailing chunk into the previous chunk.
- * Uses real token counts from the chunk objects.
+ * Extend a small trailing chunk backward by prepending content from the end
+ * of the previous chunk until it reaches minChunkSize (or maxTokens).
+ * The previous chunk is left untouched.
  *
  * @param {ChunkInfo[]} chunks - Array of chunk objects
  * @param {number} minChunkSize - Minimum token count threshold
- * @param {number} maxTokens - Maximum tokens per chunk (merge skipped if it would exceed this)
- * @returns {ChunkInfo[]} Chunks with small trailing chunk merged
+ * @param {number} maxTokens - Maximum tokens per chunk
+ * @param {number[]} tokenIds - Full-text token IDs array
+ * @param {string} tokenizerId - The tokenizer ID
+ * @param {string} originalText - The original full text
+ * @returns {Promise<ChunkInfo[]>} Chunks with trailing chunk padded if needed
  */
-export function mergeSmallTrailingChunk(chunks, minChunkSize, maxTokens) {
+export async function padSmallTrailingChunk(chunks, minChunkSize, maxTokens, tokenIds, tokenizerId, originalText) {
 	if (minChunkSize <= 0 || chunks.length < 2) return chunks;
 
 	const lastChunk = chunks[chunks.length - 1];
+	if (lastChunk.tokenCount >= minChunkSize) return chunks;
+
 	const prevChunk = chunks[chunks.length - 2];
-	if (lastChunk.tokenCount < minChunkSize && prevChunk.tokenCount + lastChunk.tokenCount <= maxTokens) {
-		const merged = [...chunks];
-		const removed = merged.pop();
-		const prev = merged[merged.length - 1];
-		merged[merged.length - 1] = {
-			text: prev.text + ' ' + removed.text,
-			tokenCount: prev.tokenCount + removed.tokenCount,
-			tokenStartIdx: prev.tokenStartIdx,
-			tokenEndIdx: removed.tokenEndIdx,
-			charStart: prev.charStart,
-			charEnd: removed.charEnd
-		};
-		return merged;
+	const isHybrid = lastChunk.tokenStartIdx === 0 && lastChunk.tokenEndIdx === 0 && chunks.length >= 2;
+
+	if (isHybrid) {
+		return await padHybridTrailingChunk(chunks, minChunkSize, maxTokens, tokenizerId);
 	}
-	return chunks;
+
+	// Token-indexed strategies (fixed tokens, sentence overlap)
+	const deficit = minChunkSize - lastChunk.tokenCount;
+	let paddingTokens = Math.min(deficit, prevChunk.tokenCount);
+	// Cap so padded chunk doesn't exceed maxTokens
+	paddingTokens = Math.min(paddingTokens, maxTokens - lastChunk.tokenCount);
+
+	if (paddingTokens <= 0) return chunks;
+
+	const newTokenStartIdx = lastChunk.tokenStartIdx - paddingTokens;
+	const newCharStart = await getCharBoundary(tokenIds, newTokenStartIdx, tokenizerId);
+	const newText = originalText.slice(newCharStart, lastChunk.charEnd).trim();
+
+	const result = [...chunks];
+	result[result.length - 1] = {
+		...lastChunk,
+		text: newText,
+		tokenCount: lastChunk.tokenCount + paddingTokens,
+		tokenStartIdx: newTokenStartIdx,
+		charStart: newCharStart
+	};
+	return result;
+}
+
+/**
+ * Pad trailing chunk for hybrid strategy by re-tokenizing the previous chunk
+ * and prepending overlap text from its end.
+ */
+async function padHybridTrailingChunk(chunks, minChunkSize, maxTokens, tokenizerId) {
+	const lastChunk = chunks[chunks.length - 1];
+	const prevChunk = chunks[chunks.length - 2];
+
+	// Re-tokenize previous chunk to get its token IDs
+	const prevTokenization = await tokenize(prevChunk.text, tokenizerId);
+	const prevTokenIds = prevTokenization.tokenIds;
+	const prevTokenCount = prevTokenization.tokenCount;
+
+	const deficit = minChunkSize - lastChunk.tokenCount;
+	let paddingTokens = Math.min(deficit, prevTokenCount);
+	paddingTokens = Math.min(paddingTokens, maxTokens - lastChunk.tokenCount);
+
+	if (paddingTokens <= 0) return chunks;
+
+	// Find the character offset in the previous chunk's text where the overlap starts
+	const overlapStartTokenIdx = prevTokenCount - paddingTokens;
+	const overlapCharOffset = await getCharBoundary(prevTokenIds, overlapStartTokenIdx, tokenizerId);
+	const overlapText = prevChunk.text.slice(overlapCharOffset).trim();
+
+	const newText = (overlapText + ' ' + lastChunk.text).trim();
+
+	const result = [...chunks];
+	result[result.length - 1] = {
+		...lastChunk,
+		text: newText,
+		tokenCount: lastChunk.tokenCount + paddingTokens
+	};
+	return result;
 }
 
 /**
