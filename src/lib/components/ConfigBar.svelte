@@ -190,9 +190,9 @@
 		background-color: var(--color-card);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		overflow: clip;
 		display: flex;
 		flex-direction: column;
+		flex-shrink: 0;
 	}
 
 	.config-row {
